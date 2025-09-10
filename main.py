@@ -2,6 +2,7 @@ import pyautogui
 import numpy as np
 from PIL import Image
 import time
+import keyboard
 
 def get_screen(region=None):
     screenshot = pyautogui.screenshot(region=region)
@@ -26,9 +27,13 @@ def find_color_positions(img, target_color, tolerance=20, grid_size=10):
     return matches
 
 def auto_click_positions(positions, offset=(0,0)):
+    print("Press ESC to stop at any time.")
     for x, y in positions:
+        if keyboard.is_pressed('esc'):
+            print("Stopped by user.")
+            break
         pyautogui.click(x + offset[0], y + offset[1])
-        time.sleep(0.02) # Adjust for site speed
+        time.sleep(0.02)
 
 def main():
     print("Focus the browser window. Press Enter to continue...")
