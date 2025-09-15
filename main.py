@@ -5,6 +5,7 @@ import time
 import keyboard
 import math
 import cv2
+import statistics
 
 color_palette = [
     # {"id": 0, "premium": False, "name": "Transparent", "rgb": [0, 0, 0]},
@@ -166,17 +167,48 @@ def detect_palette_colors(palette_img, palette_region, known_colors, tolerance=1
 
     return color_map
 
-def find_pixels_to_paint(img, target_color, tolerance=1):
+def estimate_pixel_size(img, min_size=5, max_size=50):
     """
-    Finds pixels where the preview (center) matches the target color,
-    but the surrounding pixel does not.
+    Estimates the grid pixel size from a canvas image using edge detection.
+    """
+    # Convert to grayscale and find edges
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    edges = cv2.Canny(gray, 50, 150, apertureSize=3)
+    
+    # Find contours of the squares
+    contours, _ = cv2.findContours(edges, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    
+    sizes = []
+    for cnt in contours:
+        # Get bounding box for each contour
+        x, y, w, h = cv2.boundingRect(cnt)
+        
+        # Filter for contours that are likely our grid pixels
+        # They should be roughly square and within a reasonable size range
+        is_square_like = 0.8 <= w / h <= 1.2
+        is_right_size = min_size < w < max_size and min_size < h < max_size
+        
+        if is_square_like and is_right_size:
+            sizes.append(w)
+            sizes.append(h)
+            
+    if not sizes:
+        print("Warning: Could not determine pixel size automatically. Falling back to default (15).")
+        return 15
+
+    # Return the most common size (mode)
+    return round(statistics.mode(sizes))
+
+
+def find_pixels_to_paint(img, target_color, pixel_size, tolerance=5):
+    """
+    Finds pixels that need to be painted with the dynamically determined pixel_size.
     """
     h, w = img.shape[:2]
-    # This pixel size estimation is a placeholder. A more robust method may be needed.
-    pixel_size = 15 # A common size, adjust if needed
-    preview_size = pixel_size // 3
+    preview_size = max(1, pixel_size // 3) # Ensure preview is at least 1 pixel
     matches = []
 
+    # Iterate over the grid using the estimated pixel_size
     for y in range(0, h - pixel_size + 1, pixel_size):
         for x in range(0, w - pixel_size + 1, pixel_size):
             # Get center of pixel for preview sampling
@@ -186,16 +218,13 @@ def find_pixels_to_paint(img, target_color, tolerance=1):
             # Sample preview color (center)
             preview_color = img[cy, cx][:3]
 
-            # Check if preview matches the target color
             is_preview_match = all(abs(int(preview_color[i]) - target_color[i]) <= tolerance for i in range(3))
 
             if is_preview_match:
                 # Sample outer pixel color to see if it's already painted
-                # Take a corner sample, assuming it's not part of the preview
                 pixel_color = img[y + 2, x + 2][:3]
                 is_pixel_match = all(abs(int(pixel_color[i]) - target_color[i]) <= tolerance for i in range(3))
 
-                # If preview matches but the pixel itself doesn't, we need to paint it
                 if not is_pixel_match:
                     matches.append((cx, cy))
     return matches
@@ -228,6 +257,13 @@ def main():
     palette_region = select_palette_region()
     palette_img = get_screen(palette_region)
 
+    # --- DYNAMIC PIXEL SIZE ESTIMATION ---
+    print("Estimating pixel size from canvas...")
+    canvas_img_for_estimate = get_screen(canvas_region)
+    pixel_size = estimate_pixel_size(canvas_img_for_estimate)
+    print(f"Estimated pixel size: {pixel_size}x{pixel_size}")
+    # --- END ESTIMATION ---
+
     # Detect colors and their positions from the selected palette region
     color_position_map = detect_palette_colors(palette_img, palette_region, color_palette)
     print(f"Detected {len(color_position_map)} colors in the selected palette region.")
@@ -250,14 +286,14 @@ def main():
         if keyboard.is_pressed('esc'):
             print("Stopped by user.")
             break
-        print(f"Checking color {color['name']} ({color['rgb']}), premium={color['premium']}, bought={color.get('bought')}")
+        # print(f"Checking color {color['name']} ({color['rgb']}), premium={color['premium']}, bought={color.get('bought')}")
         if color['premium'] == True and color.get('bought') == False:
-            print(f"Skipping premium color {color['name']} as it is not bought.")
+            # print(f"Skipping premium color {color['name']} as it is not bought.")
             continue # Skip not bought premium colors
 
         target_rgb = tuple(color['rgb'])
         if target_rgb in color_position_map:
-            print(f"Processing color {color['name']} ({color['rgb']})")
+            # print(f"Processing color {color['name']} ({color['rgb']})")
             # Click the color in the palette to select it
             px, py = color_position_map[target_rgb]
             pyautogui.click(px, py)
@@ -265,7 +301,8 @@ def main():
 
             # Scan canvas for pixels that need painting with this color
             img = get_screen(canvas_region)
-            positions = find_pixels_to_paint(img, target_rgb)
+            # Pass the dynamically found pixel_size to the function
+            positions = find_pixels_to_paint(img, target_rgb, pixel_size)
             print(f"Found {len(positions)} spots to paint for {color['name']}")
 
             if positions:
