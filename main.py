@@ -41,25 +41,103 @@ color_palette = [
     {"id": 30, "premium": False, "name": "Brown", "rgb": [149, 104, 42]},
     {"id": 31, "premium": False, "name": "Beige", "rgb": [248, 178, 119]},
     {"id": 32, "premium": True, "name": "Medium Gray", "rgb": [170, 170, 170]},
-    {"id": 33, "premium": True, "name": "Dark Red", "rgb": [165, 14, 30], "bought": False},
+    {
+        "id": 33,
+        "premium": True,
+        "name": "Dark Red",
+        "rgb": [165, 14, 30],
+        "bought": False,
+    },
     {"id": 34, "premium": True, "name": "Light Red", "rgb": [250, 128, 114]},
-    {"id": 35, "premium": True, "name": "Dark Orange", "rgb": [228, 92, 26], "bought": False},
+    {
+        "id": 35,
+        "premium": True,
+        "name": "Dark Orange",
+        "rgb": [228, 92, 26],
+        "bought": False,
+    },
     {"id": 36, "premium": True, "name": "Light Tan", "rgb": [214, 181, 148]},
-    {"id": 37, "premium": True, "name": "Dark Goldenrod", "rgb": [156, 132, 49], "bought": False},
-    {"id": 38, "premium": True, "name": "Goldenrod", "rgb": [197, 173, 49], "bought": False},
-    {"id": 39, "premium": True, "name": "Light Goldenrod", "rgb": [232, 212, 95], "bought": False},
-    {"id": 40, "premium": True, "name": "Dark Olive", "rgb": [74, 107, 58], "bought": False},
+    {
+        "id": 37,
+        "premium": True,
+        "name": "Dark Goldenrod",
+        "rgb": [156, 132, 49],
+        "bought": False,
+    },
+    {
+        "id": 38,
+        "premium": True,
+        "name": "Goldenrod",
+        "rgb": [197, 173, 49],
+        "bought": False,
+    },
+    {
+        "id": 39,
+        "premium": True,
+        "name": "Light Goldenrod",
+        "rgb": [232, 212, 95],
+        "bought": False,
+    },
+    {
+        "id": 40,
+        "premium": True,
+        "name": "Dark Olive",
+        "rgb": [74, 107, 58],
+        "bought": False,
+    },
     {"id": 41, "premium": True, "name": "Olive", "rgb": [90, 148, 74], "bought": False},
-    {"id": 42, "premium": True, "name": "Light Olive", "rgb": [132, 197, 115], "bought": False},
-    {"id": 43, "premium": True, "name": "Dark Cyan", "rgb": [15, 121, 159], "bought": False},
-    {"id": 44, "premium": True, "name": "Light Cyan", "rgb": [187, 250, 242], "bought": False},
-    {"id": 45, "premium": True, "name": "Light Blue", "rgb": [125, 199, 255], "bought": False},
-    {"id": 46, "premium": True, "name": "Dark Indigo", "rgb": [77, 49, 184], "bought": False},
+    {
+        "id": 42,
+        "premium": True,
+        "name": "Light Olive",
+        "rgb": [132, 197, 115],
+        "bought": False,
+    },
+    {
+        "id": 43,
+        "premium": True,
+        "name": "Dark Cyan",
+        "rgb": [15, 121, 159],
+        "bought": False,
+    },
+    {
+        "id": 44,
+        "premium": True,
+        "name": "Light Cyan",
+        "rgb": [187, 250, 242],
+        "bought": False,
+    },
+    {
+        "id": 45,
+        "premium": True,
+        "name": "Light Blue",
+        "rgb": [125, 199, 255],
+        "bought": False,
+    },
+    {
+        "id": 46,
+        "premium": True,
+        "name": "Dark Indigo",
+        "rgb": [77, 49, 184],
+        "bought": False,
+    },
     {"id": 47, "premium": True, "name": "Dark Slate Blue", "rgb": [74, 66, 132]},
     {"id": 48, "premium": True, "name": "Slate Blue", "rgb": [122, 113, 196]},
     {"id": 49, "premium": True, "name": "Light Slate Blue", "rgb": [181, 174, 241]},
-    {"id": 50, "premium": True, "name": "Light Brown", "rgb": [219, 164, 99], "bought": False},
-    {"id": 51, "premium": True, "name": "Dark Beige", "rgb": [209, 128, 81], "bought": False},
+    {
+        "id": 50,
+        "premium": True,
+        "name": "Light Brown",
+        "rgb": [219, 164, 99],
+        "bought": False,
+    },
+    {
+        "id": 51,
+        "premium": True,
+        "name": "Dark Beige",
+        "rgb": [209, 128, 81],
+        "bought": False,
+    },
     {"id": 52, "premium": True, "name": "Light Beige", "rgb": [255, 197, 165]},
     {"id": 53, "premium": True, "name": "Dark Peach", "rgb": [155, 82, 73]},
     {"id": 54, "premium": True, "name": "Peach", "rgb": [209, 128, 120]},
@@ -71,19 +149,25 @@ color_palette = [
     {"id": 60, "premium": True, "name": "Light Slate", "rgb": [179, 185, 209]},
     {"id": 61, "premium": True, "name": "Dark Stone", "rgb": [109, 100, 63]},
     {"id": 62, "premium": True, "name": "Stone", "rgb": [148, 140, 107]},
-    {"id": 63, "premium": True, "name": "Light Stone", "rgb": [205, 197, 158]}
+    {"id": 63, "premium": True, "name": "Light Stone", "rgb": [205, 197, 158]},
 ]
+
 
 def get_screen(region=None):
     screenshot = pyautogui.screenshot(region=region)
     return np.array(screenshot)
 
+
 def select_region():
-    print("Move your mouse to the TOP-LEFT corner of the browser window and press Enter.")
+    print(
+        "Move your mouse to the TOP-LEFT corner of the browser window and press Enter."
+    )
     input()
     x1, y1 = pyautogui.position()
     print(f"Top-left corner: ({x1}, {y1})")
-    print("Now move your mouse to the BOTTOM-RIGHT corner of the browser window and press Enter.")
+    print(
+        "Now move your mouse to the BOTTOM-RIGHT corner of the browser window and press Enter."
+    )
     input()
     x2, y2 = pyautogui.position()
     print(f"Bottom-right corner: ({x2}, {y2})")
@@ -94,12 +178,15 @@ def select_region():
     print(f"Selected region: left={left}, top={top}, width={width}, height={height}")
     return (left, top, width, height)
 
+
 def select_palette_region():
     print("Move your mouse to the TOP-LEFT corner of the palette and press Enter.")
     input()
     x1, y1 = pyautogui.position()
     print(f"Palette top-left: ({x1}, {y1})")
-    print("Now move your mouse to the BOTTOM-RIGHT corner of the palette and press Enter.")
+    print(
+        "Now move your mouse to the BOTTOM-RIGHT corner of the palette and press Enter."
+    )
     input()
     x2, y2 = pyautogui.position()
     print(f"Palette bottom-right: ({x2}, {y2})")
@@ -109,6 +196,7 @@ def select_palette_region():
     height = abs(y2 - y1)
     print(f"Palette region: left={left}, top={top}, width={width}, height={height}")
     return (left, top, width, height)
+
 
 def get_palette_positions(palette_region, num_colors):
     left, top, width, height = palette_region
@@ -120,6 +208,7 @@ def get_palette_positions(palette_region, num_colors):
         positions.append((cx, cy))
     return positions
 
+
 def find_color_positions(img, target_color, tolerance=1, grid_size=1000):
     matches = []
     h, w = img.shape[:2]
@@ -130,168 +219,262 @@ def find_color_positions(img, target_color, tolerance=1, grid_size=1000):
                 matches.append((x, y))
     return matches
 
-def detect_palette_colors(palette_img, palette_region, known_colors, tolerance=15):
+
+def detect_palette_colors(palette_img_rgb, palette_region, known_colors, tolerance=15):
     """
     Detects color swatches by searching for each known color individually.
+    Expects an RGB image.
     Returns a dictionary mapping color tuple -> screen coordinates.
     """
     color_map = {}
-    
+    # Convert the input RGB image to BGR for OpenCV processing
+    palette_img_bgr = cv2.cvtColor(palette_img_rgb, cv2.COLOR_RGB2BGR)
+
     for color_data in known_colors:
-        target_rgb = color_data['rgb']
-        
-        # Define the lower and upper bounds for the color search
-        lower_bound = np.array([max(0, c - tolerance) for c in target_rgb])
-        upper_bound = np.array([min(255, c + tolerance) for c in target_rgb])
-        
-        # Create a mask that isolates pixels matching the target color
-        mask = cv2.inRange(palette_img, lower_bound, upper_bound)
-        
-        # Find contours on the mask
+        target_rgb = tuple(color_data["rgb"])
+        target_bgr = target_rgb[::-1]
+
+        lower_bound = np.array([max(0, c - tolerance) for c in target_bgr])
+        upper_bound = np.array([min(255, c + tolerance) for c in target_bgr])
+
+        # Use the BGR image for color masking
+        mask = cv2.inRange(palette_img_bgr, lower_bound, upper_bound)
+
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        
-        # Find the largest contour, which should be the color swatch
+
         if contours:
             largest_contour = max(contours, key=cv2.contourArea)
-            if cv2.contourArea(largest_contour) > 100: # Filter noise
-                # Get the center of the swatch
+            if cv2.contourArea(largest_contour) > 100:  # Filter noise
                 M = cv2.moments(largest_contour)
                 if M["m00"] != 0:
                     cx = int(M["m10"] / M["m00"])
                     cy = int(M["m01"] / M["m00"])
-                    
-                    # Map the known color to its absolute screen coordinates
+
                     screen_x = palette_region[0] + cx
                     screen_y = palette_region[1] + cy
-                    color_map[tuple(target_rgb)] = (screen_x, screen_y)
+                    color_map[target_rgb] = (screen_x, screen_y)
 
     return color_map
 
-def estimate_pixel_size(img, min_size=5, max_size=50):
+
+def estimate_pixel_size(
+    img, min_size=5, max_size=50, debug_filename="debug_size_estimation.png"
+):
     """
-    Estimates the grid pixel size from a canvas image using edge detection.
+    Estimates the grid pixel size using clustering to differentiate between
+    large pixels and small previews. Saves a debug image.
     """
-    # Convert to grayscale and find edges
+    debug_img = img.copy()
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     edges = cv2.Canny(gray, 50, 150, apertureSize=3)
-    
-    # Find contours of the squares
     contours, _ = cv2.findContours(edges, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    
-    sizes = []
+
+    square_contours = []
+    areas = []
     for cnt in contours:
-        # Get bounding box for each contour
         x, y, w, h = cv2.boundingRect(cnt)
-        
-        # Filter for contours that are likely our grid pixels
-        # They should be roughly square and within a reasonable size range
-        is_square_like = 0.8 <= w / h <= 1.2
-        is_right_size = min_size < w < max_size and min_size < h < max_size
-        
-        if is_square_like and is_right_size:
-            sizes.append(w)
-            sizes.append(h)
-            
-    if not sizes:
-        print("Warning: Could not determine pixel size automatically. Falling back to default (15).")
+        if 0.8 <= w / h <= 1.2 and min_size < w < max_size:
+            square_contours.append(cnt)
+            areas.append(cv2.contourArea(cnt))
+
+    if len(areas) < 2:
+        print("Warning: Not enough squares found for reliable size estimation.")
         return 15
 
-    # Return the most common size (mode)
-    return round(statistics.mode(sizes))
+    # Use KMeans to separate the two groups of squares (pixels and previews)
+    Z = np.float32(areas)
+    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 10, 1.0)
+    ret, label, center = cv2.kmeans(Z, 2, None, criteria, 10, cv2.KMEANS_RANDOM_CENTERS)
+
+    # Identify which cluster corresponds to the larger pixels
+    large_cluster_label = np.argmax(center)
+
+    pixel_sizes = []
+    for i in range(len(square_contours)):
+        cnt = square_contours[i]
+        x, y, w, h = cv2.boundingRect(cnt)
+        if label[i] == large_cluster_label:
+            # This is a large pixel, draw in red
+            cv2.rectangle(debug_img, (x, y), (x + w, y + h), (0, 0, 255), 1)
+            pixel_sizes.append(w)
+            pixel_sizes.append(h)
+        else:
+            # This is a small preview, draw in green
+            cv2.rectangle(debug_img, (x, y), (x + w, y + h), (0, 255, 0), 1)
+
+    if not pixel_sizes:
+        print("Warning: Could not isolate pixel squares. Falling back to default.")
+        estimated_size = 15
+    else:
+        estimated_size = round(statistics.median(pixel_sizes))
+
+    text = f"Estimated Pixel Size: {estimated_size}"
+    cv2.putText(
+        debug_img, text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2
+    )
+    cv2.imwrite(debug_filename, debug_img)
+    print(f"Size estimation debug image saved: {debug_filename}")
+
+    return estimated_size
 
 
-def find_pixels_to_paint(img, target_color, pixel_size, tolerance=5):
+def find_pixels_to_paint(
+    img, target_color_bgr, pixel_size, tolerance=5, debug_filename=None
+):
     """
-    Finds pixels that need to be painted with the dynamically determined pixel_size.
+    Finds pixels to paint. Expects a BGR image and a BGR target color.
     """
-    h, w = img.shape[:2]
-    preview_size = max(1, pixel_size // 3) # Ensure preview is at least 1 pixel
+    h, w, _ = img.shape
     matches = []
 
+    debug_img = img.copy() if debug_filename else None
+    debug_counter = 0
+    max_debug_items = 50  # Limit how many debug markers we draw
+
     # Iterate over the grid using the estimated pixel_size
-    for y in range(0, h - pixel_size + 1, pixel_size):
-        for x in range(0, w - pixel_size + 1, pixel_size):
-            # Get center of pixel for preview sampling
+    step = pixel_size + 1  # Assuming 1px gap
+    for y in range(0, h - pixel_size, step):
+        for x in range(0, w - pixel_size, step):
             cx = x + pixel_size // 2
             cy = y + pixel_size // 2
 
-            # Sample preview color (center)
-            preview_color = img[cy, cx][:3]
+            preview_color = img[cy, cx]
+            is_preview_match = all(
+                abs(int(preview_color[i]) - target_color_bgr[i]) <= tolerance
+                for i in range(3)
+            )
 
-            is_preview_match = all(abs(int(preview_color[i]) - target_color[i]) <= tolerance for i in range(3))
-
+            decision = "SKIP"
             if is_preview_match:
-                # Sample outer pixel color to see if it's already painted
-                pixel_color = img[y + 2, x + 2][:3]
-                is_pixel_match = all(abs(int(pixel_color[i]) - target_color[i]) <= tolerance for i in range(3))
+                pixel_color = img[y + 2, x + 2]
+                is_pixel_match = all(
+                    abs(int(pixel_color[i]) - target_color_bgr[i]) <= tolerance
+                    for i in range(3)
+                )
 
                 if not is_pixel_match:
                     matches.append((cx, cy))
+                    decision = "PAINT"
+
+            # Draw debug info if enabled
+            if debug_img is not None and debug_counter < max_debug_items:
+                # Draw grid cell
+                cv2.rectangle(
+                    debug_img,
+                    (x, y),
+                    (x + pixel_size, y + pixel_size),
+                    (255, 255, 0),
+                    1,
+                )
+                # Draw preview sample point (blue)
+                cv2.circle(debug_img, (cx, cy), 2, (255, 0, 0), -1)
+                # Draw container sample point (red)
+                cv2.circle(debug_img, (x + 2, y + 2), 2, (0, 0, 255), -1)
+                # Write decision
+                if decision == "PAINT":
+                    cv2.putText(
+                        debug_img,
+                        decision,
+                        (x, y - 5),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.4,
+                        (0, 255, 0),
+                        1,
+                    )
+                    debug_counter += 1
+                # Optionally draw skip decisions for clarity
+                # else:
+                #     cv2.putText(debug_img, decision, (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (150, 150, 150), 1)
+
+    if debug_img is not None:
+        cv2.imwrite(debug_filename, debug_img)
+        print(f"Painting scan debug image saved: {debug_filename}")
+
     return matches
 
-def auto_click_positions(positions, offset=(0,0)):
+
+def auto_click_positions(positions, offset=(0, 0)):
     print("Press ESC to stop at any time.")
     for x, y in positions:
-        if keyboard.is_pressed('esc'):
+        if keyboard.is_pressed("esc"):
             print("Stopped by user.")
             break
         pyautogui.click(x + offset[0], y + offset[1])
         time.sleep(0.02)
 
-def save_palette_debug_image(palette_img, color_map, palette_region, filename="debug_palette.png"):
-    debug_img = Image.fromarray(palette_img.copy())
-    draw = ImageDraw.Draw(debug_img)
+
+def save_palette_debug_image(
+    palette_img_rgb, color_map, palette_region, filename="debug_palette.png"
+):
+    # Convert to BGR for OpenCV drawing
+    debug_img = cv2.cvtColor(palette_img_rgb, cv2.COLOR_RGB2BGR)
     box_size = 10
     for color_rgb, screen_coords in color_map.items():
-        # Convert screen coords back to image coords for drawing
         img_x = screen_coords[0] - palette_region[0]
         img_y = screen_coords[1] - palette_region[1]
-        draw.rectangle([img_x - box_size//2, img_y - box_size//2, img_x + box_size//2, img_y + box_size//2], outline="lime", width=3)
-    debug_img.save(filename)
+        # Draw a green square marker
+        cv2.rectangle(
+            debug_img,
+            (img_x - box_size // 2, img_y - box_size // 2),
+            (img_x + box_size // 2, img_y + box_size // 2),
+            (0, 255, 0),
+            2,
+        )
+    cv2.imwrite(filename, debug_img)
     print(f"Palette debug image saved: {filename}")
+
 
 def main():
     print("Focus the browser window. Press Enter to continue...")
     input()
     canvas_region = select_region()
     palette_region = select_palette_region()
-    palette_img = get_screen(palette_region)
+
+    # Take screenshots for analysis
+    palette_img_rgb = get_screen(palette_region)
+    canvas_img_rgb = get_screen(canvas_region)
+
+    # Convert to BGR format for OpenCV functions
+    palette_img_bgr = cv2.cvtColor(palette_img_rgb, cv2.COLOR_RGB2BGR)
+    canvas_img_bgr = cv2.cvtColor(canvas_img_rgb, cv2.COLOR_RGB2BGR)
 
     # --- DYNAMIC PIXEL SIZE ESTIMATION ---
     print("Estimating pixel size from canvas...")
-    canvas_img_for_estimate = get_screen(canvas_region)
-    pixel_size = estimate_pixel_size(canvas_img_for_estimate)
+    pixel_size = estimate_pixel_size(canvas_img_bgr)
     print(f"Estimated pixel size: {pixel_size}x{pixel_size}")
     # --- END ESTIMATION ---
 
     # Detect colors and their positions from the selected palette region
-    color_position_map = detect_palette_colors(palette_img, palette_region, color_palette)
+    color_position_map = detect_palette_colors(
+        palette_img_rgb, palette_region, color_palette
+    )
     print(f"Detected {len(color_position_map)} colors in the selected palette region.")
-    save_palette_debug_image(palette_img, color_position_map, palette_region)
+    save_palette_debug_image(palette_img_rgb, color_position_map, palette_region)
 
     # --- ADDED CONFIRMATION STEP ---
-    print("\nReview the debug_palette.png file.")
+    print("\nReview the debug images (debug_size_estimation.png, debug_palette.png).")
     print("Press ENTER to start painting or ESC to cancel.")
     while True:
-        if keyboard.is_pressed('enter'):
+        if keyboard.is_pressed("enter"):
             print("Starting...")
             break
-        if keyboard.is_pressed('esc'):
+        if keyboard.is_pressed("esc"):
             print("Cancelled by user. Exiting.")
             return
         time.sleep(0.05)
     # --- END CONFIRMATION ---
 
+    is_first_color = True
     for color in color_palette:
-        if keyboard.is_pressed('esc'):
+        if keyboard.is_pressed("esc"):
             print("Stopped by user.")
             break
         # print(f"Checking color {color['name']} ({color['rgb']}), premium={color['premium']}, bought={color.get('bought')}")
-        if color['premium'] == True and color.get('bought') == False:
+        if color["premium"] == True and color.get("bought") == False:
             # print(f"Skipping premium color {color['name']} as it is not bought.")
-            continue # Skip not bought premium colors
+            continue  # Skip not bought premium colors
 
-        target_rgb = tuple(color['rgb'])
+        target_rgb = tuple(color["rgb"])
         if target_rgb in color_position_map:
             # print(f"Processing color {color['name']} ({color['rgb']})")
             # Click the color in the palette to select it
@@ -300,17 +483,30 @@ def main():
             time.sleep(0.2)
 
             # Scan canvas for pixels that need painting with this color
-            img = get_screen(canvas_region)
-            # Pass the dynamically found pixel_size to the function
-            positions = find_pixels_to_paint(img, target_rgb, pixel_size)
+            img_rgb = get_screen(canvas_region)
+            img_bgr = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
+
+            # Create a debug image only for the first color to avoid spam
+            debug_file = "debug_painting_scan.png" if is_first_color else None
+
+            # --- FIX: Convert target color to BGR before passing to function ---
+            target_bgr = target_rgb[::-1]
+            positions = find_pixels_to_paint(
+                img_bgr, target_bgr, pixel_size, debug_filename=debug_file
+            )
             print(f"Found {len(positions)} spots to paint for {color['name']}")
 
+            is_first_color = False  # Ensure debug image is only created once
+
             if positions:
-                auto_click_positions(positions, offset=(canvas_region[0], canvas_region[1]))
+                auto_click_positions(
+                    positions, offset=(canvas_region[0], canvas_region[1])
+                )
             time.sleep(0.5)
         else:
             # This color was not found in the user-selected palette region
             pass
+
 
 if __name__ == "__main__":
     main()
