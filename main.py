@@ -266,7 +266,7 @@ def estimate_pixel_size(
     """
     debug_img = img.copy()
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    edges = cv2.Canny(gray, 50, 150, apertureSize=3)
+    edges = cv2.Canny(gray, 0, 0, apertureSize=3)
     contours, _ = cv2.findContours(edges, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
     square_contours = []
