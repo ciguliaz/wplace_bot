@@ -6,6 +6,105 @@ import queue
 import os
 from data import color_palette
 import cv2
+import pyautogui
+
+class RegionSelector:
+    """Overlay window for drag-to-select region functionality"""
+    def __init__(self, callback):
+        self.callback = callback
+        self.start_x = None
+        self.start_y = None
+        self.rect_id = None
+        
+        # Create fullscreen transparent overlay
+        self.overlay = tk.Toplevel()
+        self.overlay.attributes('-fullscreen', True)
+        self.overlay.attributes('-alpha', 0.3)  # Semi-transparent
+        self.overlay.attributes('-topmost', True)
+        self.overlay.configure(bg='black')
+        
+        # Create canvas for drawing selection rectangle
+        self.canvas = tk.Canvas(self.overlay, highlightthickness=0)
+        self.canvas.pack(fill='both', expand=True)
+        self.canvas.configure(bg='black')
+        
+        # Bind mouse events
+        self.canvas.bind('<Button-1>', self.on_click)
+        self.canvas.bind('<B1-Motion>', self.on_drag)
+        self.canvas.bind('<ButtonRelease-1>', self.on_release)
+        
+        # Bind escape key to cancel
+        self.overlay.bind('<Escape>', self.cancel)
+        self.overlay.focus_set()
+        
+        # Instructions
+        instruction_text = "Drag to select region. Press ESC to cancel."
+        self.canvas.create_text(
+            self.overlay.winfo_screenwidth() // 2, 50,
+            text=instruction_text,
+            fill='white',
+            font=('Arial', 16, 'bold')
+        )
+    
+    def on_click(self, event):
+        """Start selection"""
+        self.start_x = event.x
+        self.start_y = event.y
+        
+        # Remove previous rectangle if exists
+        if self.rect_id:
+            self.canvas.delete(self.rect_id)
+    
+    def on_drag(self, event):
+        """Update selection rectangle while dragging"""
+        if self.start_x is not None and self.start_y is not None:
+            # Remove previous rectangle
+            if self.rect_id:
+                self.canvas.delete(self.rect_id)
+            
+            # Draw new rectangle
+            self.rect_id = self.canvas.create_rectangle(
+                self.start_x, self.start_y, event.x, event.y,
+                outline='red', width=2, fill='', stipple='gray25'
+            )
+    
+    def on_release(self, event):
+        """Finish selection and return coordinates"""
+        if self.start_x is not None and self.start_y is not None:
+            # Calculate region coordinates
+            left = min(self.start_x, event.x)
+            top = min(self.start_y, event.y)
+            width = abs(event.x - self.start_x)
+            height = abs(event.y - self.start_y)
+            
+            # Minimum size check
+            if width > 10 and height > 10:
+                region = (left, top, width, height)
+                self.close()
+                self.callback(region)
+            else:
+                # Too small, show message and continue
+                self.canvas.create_text(
+                    event.x, event.y - 20,
+                    text="Region too small! Try again.",
+                    fill='yellow',
+                    font=('Arial', 12, 'bold')
+                )
+                self.start_x = None
+                self.start_y = None
+                if self.rect_id:
+                    self.canvas.delete(self.rect_id)
+                    self.rect_id = None
+    
+    def cancel(self, event=None):
+        """Cancel selection"""
+        self.close()
+        self.callback(None)
+    
+    def close(self):
+        """Close the overlay"""
+        self.overlay.destroy()
+
 
 class PlaceBotGUI:
     def __init__(self, root):
@@ -56,6 +155,19 @@ class PlaceBotGUI:
     
     def create_setup_tab(self):
         """Setup tab for region selection and analysis"""
+        # Instructions frame
+        instructions_frame = ttk.LabelFrame(self.setup_tab, text="Instructions", padding=10)
+        instructions_frame.pack(fill='x', padx=10, pady=5)
+        
+        instructions_text = """How to select regions:
+1. Click 'Select Canvas' or 'Select Palette' button
+2. Your screen will show a dark overlay
+3. Click and drag to select the desired region
+4. Release mouse to confirm selection
+5. Press ESC to cancel selection"""
+        
+        ttk.Label(instructions_frame, text=instructions_text, justify='left').pack(anchor='w')
+        
         # Region Selection Frame
         region_frame = ttk.LabelFrame(self.setup_tab, text="Region Selection", padding=10)
         region_frame.pack(fill='x', padx=10, pady=5)
@@ -102,16 +214,36 @@ class PlaceBotGUI:
         tolerance_frame.pack(fill='x', pady=2)
         ttk.Label(tolerance_frame, text="Color Tolerance:").pack(side='left')
         self.tolerance_var = tk.IntVar(value=5)
-        ttk.Scale(tolerance_frame, from_=1, to=20, variable=self.tolerance_var, 
-                 orient='horizontal').pack(side='right', fill='x', expand=True, padx=(10, 0))
+        tolerance_scale = ttk.Scale(tolerance_frame, from_=1, to=20, variable=self.tolerance_var, 
+                                   orient='horizontal')
+        tolerance_scale.pack(side='right', fill='x', expand=True, padx=(10, 0))
+        
+        # Tolerance value display
+        self.tolerance_label = ttk.Label(tolerance_frame, text="5")
+        self.tolerance_label.pack(side='right', padx=(5, 10))
+        tolerance_scale.configure(command=self.update_tolerance_label)
         
         # Click delay setting
         delay_frame = ttk.Frame(settings_frame)
         delay_frame.pack(fill='x', pady=2)
         ttk.Label(delay_frame, text="Click Delay (ms):").pack(side='left')
         self.delay_var = tk.IntVar(value=20)
-        ttk.Scale(delay_frame, from_=10, to=100, variable=self.delay_var, 
-                 orient='horizontal').pack(side='right', fill='x', expand=True, padx=(10, 0))
+        delay_scale = ttk.Scale(delay_frame, from_=10, to=100, variable=self.delay_var, 
+                               orient='horizontal')
+        delay_scale.pack(side='right', fill='x', expand=True, padx=(10, 0))
+        
+        # Delay value display
+        self.delay_label = ttk.Label(delay_frame, text="20")
+        self.delay_label.pack(side='right', padx=(5, 10))
+        delay_scale.configure(command=self.update_delay_label)
+    
+    def update_tolerance_label(self, value):
+        """Update tolerance value display"""
+        self.tolerance_label.config(text=f"{int(float(value))}")
+    
+    def update_delay_label(self, value):
+        """Update delay value display"""
+        self.delay_label.config(text=f"{int(float(value))}")
     
     def create_colors_tab(self):
         """Color control tab for enabling/disabling colors"""
@@ -243,47 +375,43 @@ class PlaceBotGUI:
         log_scrollbar.pack(side='right', fill='y')
     
     def select_canvas_region(self):
-        """Hide window and let user select canvas region"""
-        self.root.withdraw()
-        try:
-            self.canvas_region = self.interactive_region_select("canvas")
-            self.canvas_status.config(text=f"Selected: {self.canvas_region}", foreground="green")
-            self.check_ready_for_analysis()
-        finally:
-            self.root.deiconify()
+        """Start canvas region selection with drag functionality"""
+        self.root.withdraw()  # Hide main window
+        RegionSelector(self.on_canvas_region_selected)
     
     def select_palette_region(self):
-        """Hide window and let user select palette region"""
-        self.root.withdraw()
-        try:
-            self.palette_region = self.interactive_region_select("palette")
-            self.palette_status.config(text=f"Selected: {self.palette_region}", foreground="green")
-            self.check_ready_for_analysis()
-        finally:
-            self.root.deiconify()
+        """Start palette region selection with drag functionality"""
+        self.root.withdraw()  # Hide main window
+        RegionSelector(self.on_palette_region_selected)
     
-    def interactive_region_select(self, region_type):
-        """Interactive region selection (reuse your existing functions)"""
-        import pyautogui
-        
-        messagebox.showinfo("Region Selection", 
-                           f"Click OK, then select the {region_type} region.\n"
-                           "The window will be hidden during selection.")
-        
-        print(f"Move mouse to TOP-LEFT of {region_type} and press Enter")
-        input()
-        x1, y1 = pyautogui.position()
-        
-        print(f"Move mouse to BOTTOM-RIGHT of {region_type} and press Enter")
-        input()
-        x2, y2 = pyautogui.position()
-        
-        left = min(x1, x2)
-        top = min(y1, y2)
-        width = abs(x2 - x1)
-        height = abs(y2 - y1)
-        
-        return (left, top, width, height)
+    def on_canvas_region_selected(self, region):
+        """Callback when canvas region is selected"""
+        self.root.deiconify()  # Show main window
+        if region:
+            self.canvas_region = region
+            self.canvas_status.config(text=f"Selected: {region}", foreground="green")
+            self.log_message(f"Canvas region selected: {region}")
+        else:
+            self.log_message("Canvas region selection cancelled")
+        self.check_ready_for_analysis()
+    
+    def on_palette_region_selected(self, region):
+        """Callback when palette region is selected"""
+        self.root.deiconify()  # Show main window
+        if region:
+            self.palette_region = region
+            self.palette_status.config(text=f"Selected: {region}", foreground="green")
+            self.log_message(f"Palette region selected: {region}")
+        else:
+            self.log_message("Palette region selection cancelled")
+        self.check_ready_for_analysis()
+    
+    def log_message(self, message):
+        """Add message to log"""
+        self.log_text.config(state='normal')
+        self.log_text.insert(tk.END, f"{message}\n")
+        self.log_text.see(tk.END)
+        self.log_text.config(state='disabled')
     
     def check_ready_for_analysis(self):
         """Enable analysis button if both regions are selected"""
@@ -294,6 +422,7 @@ class PlaceBotGUI:
         """Run analysis in a separate thread"""
         self.analyze_btn.config(state='disabled', text="Analyzing...")
         self.analysis_status.config(text="Running analysis...")
+        self.log_message("Starting analysis...")
         
         # Run in thread to avoid freezing UI
         thread = threading.Thread(target=self._analyze_worker)
@@ -346,6 +475,7 @@ class PlaceBotGUI:
         self.start_btn.config(state='disabled')
         self.stop_btn.config(state='normal')
         self.status_label.config(text="Painting...")
+        self.log_message("Starting painting bot...")
         
         # Start bot in separate thread
         self.bot_thread = threading.Thread(target=self._bot_worker)
@@ -425,6 +555,7 @@ class PlaceBotGUI:
         """Stop the painting bot"""
         self.is_running = False
         self.status_label.config(text="Stopping...")
+        self.log_message("Stopping bot...")
     
     def process_queue(self):
         """Process messages from worker threads"""
@@ -440,10 +571,12 @@ class PlaceBotGUI:
                                               f"Colors: {message['colors_found']}")
                     self.start_btn.config(state='normal')
                     self.update_stats()
+                    self.log_message(f"Analysis completed successfully. Found {message['pixel_count']} pixels and {message['colors_found']} colors.")
                     
                 elif message['type'] == 'analysis_error':
                     self.analyze_btn.config(state='normal', text="Analyze Canvas & Palette")
                     self.analysis_status.config(text=f"Analysis failed: {message['error']}")
+                    self.log_message(f"Analysis failed: {message['error']}")
                     
                 elif message['type'] == 'progress':
                     self.progress_var.set(message['progress'])
@@ -454,12 +587,14 @@ class PlaceBotGUI:
                     self.start_btn.config(state='normal')
                     self.stop_btn.config(state='disabled')
                     self.status_label.config(text="Painting complete!")
+                    self.log_message("Painting completed successfully!")
                     
                 elif message['type'] == 'bot_error':
                     self.is_running = False
                     self.start_btn.config(state='normal')
                     self.stop_btn.config(state='disabled')
                     self.status_label.config(text=f"Error: {message['error']}")
+                    self.log_message(f"Bot error: {message['error']}")
                     
         except queue.Empty:
             pass
