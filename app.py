@@ -7,6 +7,7 @@ import os
 from data import color_palette
 import cv2
 import pyautogui
+import json
 
 class RegionSelector:
     """Overlay window for drag-to-select region functionality"""
@@ -270,9 +271,13 @@ class PlaceBotGUI:
                   command=self.disable_all_colors).pack(side='left', padx=5)
         ttk.Button(control_frame, text="Only Free Colors", 
                   command=self.enable_only_free).pack(side='left', padx=5)
+        ttk.Button(control_frame, text="Available Colors (Free + Bought)", 
+                  command=self.enable_available_colors).pack(side='left', padx=5)
         
         # Create color checkboxes
         self.color_vars = {}
+        self.bought_vars = {}  # Track bought status
+        
         for color in color_palette:
             color_frame = ttk.Frame(scrollable_frame)
             color_frame.pack(fill='x', padx=10, pady=2)
@@ -285,22 +290,114 @@ class PlaceBotGUI:
             hex_color = f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
             color_canvas.create_rectangle(0, 0, 30, 20, fill=hex_color, outline="")
             
-            # Checkbox and label
-            var = tk.BooleanVar(value=not color.get('premium', False) or color.get('bought', False))
+            # Enable/disable checkbox
+            is_available = not color.get('premium', False) or color.get('bought', False)
+            var = tk.BooleanVar(value=is_available)
             self.color_vars[color['name']] = var
             
             checkbox = ttk.Checkbutton(color_frame, variable=var)
             checkbox.pack(side='left', padx=5)
             
+            # Color name label
             label_text = color['name']
             if color.get('premium', False):
-                label_text += " (Premium)"
+                if color.get('bought', False):
+                    label_text += " (Premium - Bought)"
+                    label_color = "green"
+                else:
+                    label_text += " (Premium - Not Bought)"
+                    label_color = "red"
+            else:
+                label_text += " (Free)"
+                label_color = "blue"
             
-            ttk.Label(color_frame, text=label_text).pack(side='left', padx=5)
+            name_label = ttk.Label(color_frame, text=label_text, foreground=label_color)
+            name_label.pack(side='left', padx=5)
+            
+            # Bought status toggle (only for premium colors)
+            if color.get('premium', False):
+                bought_var = tk.BooleanVar(value=color.get('bought', False))
+                self.bought_vars[color['name']] = bought_var
+                
+                bought_checkbox = ttk.Checkbutton(
+                    color_frame, 
+                    text="Bought", 
+                    variable=bought_var,
+                    command=lambda c=color: self.toggle_bought_status(c)
+                )
+                bought_checkbox.pack(side='left', padx=10)
         
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
-    
+
+    def toggle_bought_status(self, color):
+        """Toggle bought status and update data.py"""
+        color_name = color['name']
+        new_bought_status = self.bought_vars[color_name].get()
+        
+        # Update the color_palette data
+        for c in color_palette:
+            if c['name'] == color_name:
+                c['bought'] = new_bought_status
+                break
+        
+        # Save to data.py file
+        self.save_color_data()
+        
+        # Refresh the color tab display
+        self.refresh_colors_tab()
+
+    def save_color_data(self):
+        """Save color_palette data back to data.py"""
+        try:
+            # Read the current data.py file
+            with open('data.py', 'r') as f:
+                content = f.read()
+            
+            # Generate new color_palette string
+            new_palette_str = "color_palette = [\n"
+            for color in color_palette:
+                new_palette_str += "    {\n"
+                for key, value in color.items():
+                    if isinstance(value, str):
+                        new_palette_str += f'        "{key}": "{value}",\n'
+                    elif isinstance(value, list):
+                        new_palette_str += f'        "{key}": {value},\n'
+                    else:
+                        new_palette_str += f'        "{key}": {value},\n'
+                new_palette_str += "    },\n"
+            new_palette_str += "]"
+            
+            # Replace the color_palette in the file
+            import re
+            pattern = r'color_palette = \[.*?\]'
+            new_content = re.sub(pattern, new_palette_str, content, flags=re.DOTALL)
+            
+            # Write back to file
+            with open('data.py', 'w') as f:
+                f.write(new_content)
+            
+            # No need for global declaration since we're not reassigning the variable
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to save color data: {e}")
+
+    def refresh_colors_tab(self):
+        """Refresh the colors tab to show updated bought status"""
+        # Clear the current colors tab
+        for widget in self.colors_tab.winfo_children():
+            widget.destroy()
+            
+        # Recreate the colors tab
+        self.create_colors_tab()
+
+    def enable_available_colors(self):
+        """Enable all available colors (free + bought premium colors)"""
+        for color in color_palette:
+            is_available = not color.get('premium', False) or color.get('bought', False)
+            if color['name'] in self.color_vars:
+                self.color_vars[color['name']].set(is_available)
+
     def create_preview_tab(self):
         """Preview tab for showing debug images and analysis results"""
         # Image display frame
@@ -611,9 +708,11 @@ class PlaceBotGUI:
             var.set(False)
     
     def enable_only_free(self):
+        """Enable only free colors"""
         for color in color_palette:
             is_free = not color.get('premium', False)
-            self.color_vars[color['name']].set(is_free)
+            if color['name'] in self.color_vars:
+                self.color_vars[color['name']].set(is_free)
     
     def load_debug_image(self, event=None):
         """Load and display debug image"""
