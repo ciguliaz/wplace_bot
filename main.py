@@ -15,15 +15,11 @@ def get_screen(region=None):
 
 
 def select_region():
-    print(
-        "Move your mouse to the TOP-LEFT corner of the browser window and press Enter."
-    )
+    print("Move your mouse to the TOP-LEFT corner of the browser window and press Enter.")
     input()
     x1, y1 = pyautogui.position()
     print(f"Top-left corner: ({x1}, {y1})")
-    print(
-        "Now move your mouse to the BOTTOM-RIGHT corner of the browser window and press Enter."
-    )
+    print(        "Now move your mouse to the BOTTOM-RIGHT corner of the browser window and press Enter."    )
     input()
     x2, y2 = pyautogui.position()
     print(f"Bottom-right corner: ({x2}, {y2})")
@@ -40,9 +36,7 @@ def select_palette_region():
     input()
     x1, y1 = pyautogui.position()
     print(f"Palette top-left: ({x1}, {y1})")
-    print(
-        "Now move your mouse to the BOTTOM-RIGHT corner of the palette and press Enter."
-    )
+    print("Now move your mouse to the BOTTOM-RIGHT corner of the palette and press Enter.")
     input()
     x2, y2 = pyautogui.position()
     print(f"Palette bottom-right: ({x2}, {y2})")
@@ -113,9 +107,7 @@ def detect_palette_colors(palette_img_rgb, palette_region, known_colors, toleran
     return color_map
 
 
-def estimate_pixel_size(
-    img, min_size=5, max_size=50, debug_filename="debug_size_estimation.png"
-):
+def estimate_pixel_size(img, min_size=5, max_size=50, debug_filename="debug_size_estimation.png"):
     """
     Estimates the grid pixel size and saves a debug image showing the process.
     """
@@ -145,7 +137,6 @@ def estimate_pixel_size(
         print("Warning: Could not find enough squares. Falling back to default (22).")
         return 22
 
-    # --- NEW APPROACH: Use preview squares as reference ---
     sorted_sizes = sorted(square_sizes)
 
     # Find the smallest group (these should be preview squares)
@@ -160,14 +151,11 @@ def estimate_pixel_size(
     expected_pixel_size = preview_median * 3
 
     # Set tolerance for what we consider valid single pixels
-    # Allow 20% variance from expected size
     pixel_min = expected_pixel_size * 0.8
     pixel_max = expected_pixel_size * 1.2
 
-    print(
-        f"Debug: Preview median={preview_median}, Expected pixel={expected_pixel_size}"
-    )
-    print(f"Debug: Accepting pixels between {pixel_min} and {pixel_max}")
+    # print(f"Debug: Preview median={preview_median}, Expected pixel={expected_pixel_size}")
+    # print(f"Debug: Accepting pixels between {pixel_min} and {pixel_max}")
 
     pixel_sizes = []
     preview_sizes = []
@@ -189,31 +177,23 @@ def estimate_pixel_size(
             filtered_out += 1
 
     if not pixel_sizes:
-        print(
-            "Warning: Could not find valid single pixel squares. Using calculated size."
-        )
+        print("Warning: Could not find valid single pixel squares. Using calculated size.")
         estimated_size = round(expected_pixel_size)
     else:
         estimated_size = round(statistics.median(pixel_sizes))
 
-    print(
-        f"Debug: Found {len(preview_sizes)} previews, {len(pixel_sizes)} pixels, {filtered_out} filtered out"
-    )
+    # print(f"Debug: Found {len(preview_sizes)} previews, {len(pixel_sizes)} pixels, {filtered_out} filtered out")
 
     # Add text to the debug image
     text = f"Estimated Pixel Size: {estimated_size}"
-    cv2.putText(
-        debug_img, text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2
-    )
+    cv2.putText(debug_img, text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
     cv2.imwrite(debug_filename, debug_img)
     print(f"Size estimation debug image saved: {debug_filename}")
 
     return estimated_size
 
 
-def find_pixels_to_paint(
-    img, target_color_bgr, pixel_size, tolerance=5, debug_filename=None
-):
+def find_pixels_to_paint(img, target_color_bgr, pixel_size, tolerance=5, debug_filename=None):
     """
     Finds pixels to paint. Expects a BGR image and a BGR target color.
     """
@@ -296,9 +276,7 @@ def auto_click_positions(positions, offset=(0, 0)):
         time.sleep(0.02)
 
 
-def save_palette_debug_image(
-    palette_img_rgb, color_map, palette_region, filename="debug_palette.png"
-):
+def save_palette_debug_image(palette_img_rgb, color_map, palette_region, filename="debug_palette.png"):
     # Convert to BGR for OpenCV drawing
     debug_img = cv2.cvtColor(palette_img_rgb, cv2.COLOR_RGB2BGR)
     box_size = 10
@@ -331,14 +309,10 @@ def build_pixel_map(img, pixel_size, preview_positions):
 
         # Make sure we're within image bounds
         if (
-            pixel_y + 2 < img.shape[0]
-            and pixel_x + 2 < img.shape[1]
-            and pixel_y >= 0
-            and pixel_x >= 0
-            and preview_y >= 0
-            and preview_x >= 0
-            and preview_y < img.shape[0]
-            and preview_x < img.shape[1]
+            pixel_y + 2 < img.shape[0] and pixel_x + 2 < img.shape[1]
+            and pixel_y >= 0 and pixel_x >= 0
+            and preview_y >= 0 and preview_x >= 0
+            and preview_y < img.shape[0] and preview_x < img.shape[1]
         ):
             # Sample both preview color (center) and pixel color (container)
             preview_color = img[preview_y, preview_x]
@@ -443,14 +417,12 @@ def main():
     pixel_size = estimate_pixel_size(canvas_img_bgr)
     print(f"Estimated pixel size: {pixel_size}x{pixel_size}")
 
-    # --- NEW: BUILD PIXEL MAP ONCE ---
     print("Building pixel map...")
     preview_positions = get_preview_positions_from_estimation(
         canvas_img_bgr, pixel_size
     )
     pixel_map = build_pixel_map(canvas_img_bgr, pixel_size, preview_positions)
     print(f"Built pixel map with {len(pixel_map)} pixels")
-    # --- END NEW ---
 
     # Detect colors and their positions from the selected palette region
     color_position_map = detect_palette_colors(
@@ -459,7 +431,6 @@ def main():
     print(f"Detected {len(color_position_map)} colors in the selected palette region.")
     save_palette_debug_image(palette_img_rgb, color_position_map, palette_region)
 
-    # --- ADDED CONFIRMATION STEP ---
     print("\nReview the debug images (debug_size_estimation.png, debug_palette.png).")
     print("Press ENTER to start painting or ESC to cancel.")
     while True:
@@ -470,7 +441,6 @@ def main():
             print("Cancelled by user. Exiting.")
             return
         time.sleep(0.05)
-    # --- END CONFIRMATION ---
 
     is_first_color = True
     for color in color_palette:
@@ -483,19 +453,14 @@ def main():
 
         target_rgb = tuple(color["rgb"])
         if target_rgb in color_position_map:
-            # --- NEW: Use pre-built pixel map instead of scanning ---
             target_bgr = target_rgb[::-1]
             positions = find_pixels_to_paint_from_map(pixel_map, target_bgr)
             print(f"Found {len(positions)} spots to paint for {color['name']}")
-            # --- END NEW ---
 
             if positions:
-            # Click the color in the palette to select it
                 px, py = color_position_map[target_rgb]
                 pyautogui.click(px, py)
-                time.sleep(0.2)            
-            
-            if positions:
+                time.sleep(0.2)
                 auto_click_positions(
                     positions, offset=(canvas_region[0], canvas_region[1])
                 )
