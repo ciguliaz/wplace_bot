@@ -111,7 +111,10 @@ class PlaceBotGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Place Bot - Pixel Art Automation")
-        self.root.geometry("1200x800")
+        self.root.geometry("800x800")
+        
+        # Load bought status on startup
+        self.load_bought_status()
         
         # State variables
         self.canvas_region = None
@@ -214,13 +217,13 @@ class PlaceBotGUI:
         tolerance_frame = ttk.Frame(settings_frame)
         tolerance_frame.pack(fill='x', pady=2)
         ttk.Label(tolerance_frame, text="Color Tolerance:").pack(side='left')
-        self.tolerance_var = tk.IntVar(value=5)
-        tolerance_scale = ttk.Scale(tolerance_frame, from_=1, to=20, variable=self.tolerance_var, 
+        self.tolerance_var = tk.IntVar(value=1)
+        tolerance_scale = ttk.Scale(tolerance_frame, from_=0, to=20, variable=self.tolerance_var, 
                                    orient='horizontal')
         tolerance_scale.pack(side='right', fill='x', expand=True, padx=(10, 0))
         
         # Tolerance value display
-        self.tolerance_label = ttk.Label(tolerance_frame, text="5")
+        self.tolerance_label = ttk.Label(tolerance_frame, text="1")
         self.tolerance_label.pack(side='right', padx=(5, 10))
         tolerance_scale.configure(command=self.update_tolerance_label)
         
@@ -228,13 +231,13 @@ class PlaceBotGUI:
         delay_frame = ttk.Frame(settings_frame)
         delay_frame.pack(fill='x', pady=2)
         ttk.Label(delay_frame, text="Click Delay (ms):").pack(side='left')
-        self.delay_var = tk.IntVar(value=20)
+        self.delay_var = tk.IntVar(value=15)
         delay_scale = ttk.Scale(delay_frame, from_=10, to=100, variable=self.delay_var, 
                                orient='horizontal')
         delay_scale.pack(side='right', fill='x', expand=True, padx=(10, 0))
         
         # Delay value display
-        self.delay_label = ttk.Label(delay_frame, text="20")
+        self.delay_label = ttk.Label(delay_frame, text="15")
         self.delay_label.pack(side='right', padx=(5, 10))
         delay_scale.configure(command=self.update_delay_label)
     
@@ -348,40 +351,23 @@ class PlaceBotGUI:
         self.refresh_colors_tab()
 
     def save_color_data(self):
-        """Save color_palette data back to data.py"""
+        """Save bought status to a separate JSON file (much simpler!)"""
         try:
-            # Read the current data.py file
-            with open('data.py', 'r') as f:
-                content = f.read()
-            
-            # Generate new color_palette string
-            new_palette_str = "color_palette = [\n"
+            # Extract only the bought status for premium colors
+            bought_status = {}
             for color in color_palette:
-                new_palette_str += "    {\n"
-                for key, value in color.items():
-                    if isinstance(value, str):
-                        new_palette_str += f'        "{key}": "{value}",\n'
-                    elif isinstance(value, list):
-                        new_palette_str += f'        "{key}": {value},\n'
-                    else:
-                        new_palette_str += f'        "{key}": {value},\n'
-                new_palette_str += "    },\n"
-            new_palette_str += "]"
+                if color.get('premium', False):
+                    bought_status[color['name']] = color.get('bought', False)
             
-            # Replace the color_palette in the file
-            import re
-            pattern = r'color_palette = \[.*?\]'
-            new_content = re.sub(pattern, new_palette_str, content, flags=re.DOTALL)
+            # Save to JSON file
+            with open('bought_colors.json', 'w') as f:
+                json.dump(bought_status, f, indent=2)
             
-            # Write back to file
-            with open('data.py', 'w') as f:
-                f.write(new_content)
-            
-            # No need for global declaration since we're not reassigning the variable
+            print("Saved bought status to bought_colors.json")
             
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to save color data: {e}")
-
+            messagebox.showerror("Error", f"Failed to save bought status: {e}")
+            
     def refresh_colors_tab(self):
         """Refresh the colors tab to show updated bought status"""
         # Clear the current colors tab
@@ -397,6 +383,23 @@ class PlaceBotGUI:
             is_available = not color.get('premium', False) or color.get('bought', False)
             if color['name'] in self.color_vars:
                 self.color_vars[color['name']].set(is_available)
+                
+    def load_bought_status(self):
+        """Load bought status from JSON file on startup"""
+        try:
+            if os.path.exists('bought_colors.json'):
+                with open('bought_colors.json', 'r') as f:
+                    bought_status = json.load(f)
+                
+                # Apply to color_palette
+                for color in color_palette:
+                    if color['name'] in bought_status:
+                        color['bought'] = bought_status[color['name']]
+                        
+                print("Loaded bought status from bought_colors.json")
+                        
+        except Exception as e:
+            print(f"Failed to load bought status: {e}")
 
     def create_preview_tab(self):
         """Preview tab for showing debug images and analysis results"""

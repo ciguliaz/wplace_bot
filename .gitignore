@@ -3,7 +3,10 @@
 *.jpeg
 *.gif
 *.spec
+
 .venv
 __pycache__
 build
 dist
+
+bought_colors.json
