@@ -317,6 +317,113 @@ def save_palette_debug_image(
     print(f"Palette debug image saved: {filename}")
 
 
+def build_pixel_map(img, pixel_size, preview_positions):
+    """
+    Builds a map of all pixel positions with their preview and pixel colors.
+    Returns a dictionary: {(x, y): {'preview_color': bgr, 'pixel_color': bgr}}
+    """
+    pixel_map = {}
+
+    for preview_x, preview_y in preview_positions:
+        # Calculate the pixel container position from preview position
+        pixel_x = preview_x - pixel_size // 2
+        pixel_y = preview_y - pixel_size // 2
+
+        # Make sure we're within image bounds
+        if (
+            pixel_y + 2 < img.shape[0]
+            and pixel_x + 2 < img.shape[1]
+            and pixel_y >= 0
+            and pixel_x >= 0
+            and preview_y >= 0
+            and preview_x >= 0
+            and preview_y < img.shape[0]
+            and preview_x < img.shape[1]
+        ):
+            # Sample both preview color (center) and pixel color (container)
+            preview_color = img[preview_y, preview_x]
+            pixel_color = img[pixel_y + 2, pixel_x + 2]
+
+            pixel_map[(preview_x, preview_y)] = {
+                "preview_color": tuple(preview_color),
+                "pixel_color": tuple(pixel_color),
+            }
+
+    return pixel_map
+
+
+def get_preview_positions_from_estimation(img, pixel_size):
+    """
+    Extract all preview positions from the size estimation process.
+    """
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    edges = cv2.Canny(gray, 0, 0, apertureSize=3)
+    contours, _ = cv2.findContours(edges, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+    preview_positions = []
+
+    # Use same logic as estimate_pixel_size to find previews
+    square_sizes = []
+    square_contours = []
+
+    for cnt in contours:
+        x, y, w, h = cv2.boundingRect(cnt)
+
+        is_square_like = 0.8 <= w / h <= 1.2
+        is_right_size = 5 < w < 50 and 5 < h < 50
+
+        if is_square_like and is_right_size:
+            square_sizes.append(w)
+            square_contours.append((cnt, w, h))
+
+    if len(square_sizes) < 10:
+        return []
+
+    sorted_sizes = sorted(square_sizes)
+    preview_count = max(1, len(sorted_sizes) // 4)
+    potential_previews = sorted_sizes[:preview_count]
+    preview_median = statistics.median(potential_previews)
+
+    for cnt, w, h in square_contours:
+        if w <= preview_median * 1.5:  # This is a preview
+            x, y, _, _ = cv2.boundingRect(cnt)
+            center_x = x + w // 2
+            center_y = y + h // 2
+            preview_positions.append((center_x, center_y))
+
+    return preview_positions
+
+
+def find_pixels_to_paint_from_map(pixel_map, target_bgr, tolerance=5):
+    """
+    Uses the pre-built pixel map to find pixels that need painting.
+    Only paints pixels where:
+    1. The preview shows the target color (indicating intention to paint this color)
+    2. The actual pixel container is NOT yet the target color
+    """
+    matches = []
+
+    for (preview_x, preview_y), colors in pixel_map.items():
+        preview_color = colors["preview_color"]
+        pixel_color = colors["pixel_color"]
+
+        # Check if preview shows the target color (user wants to paint this color here)
+        preview_matches_target = all(
+            abs(int(preview_color[i]) - target_bgr[i]) <= tolerance for i in range(3)
+        )
+
+        # Check if pixel is already the correct color
+        pixel_already_correct = all(
+            abs(int(pixel_color[i]) - target_bgr[i]) <= tolerance for i in range(3)
+        )
+
+        # Only paint if preview shows target color but pixel isn't painted yet
+        if preview_matches_target and not pixel_already_correct:
+            matches.append((preview_x, preview_y))
+
+    return matches
+
+
 def main():
     print("Focus the browser window. Press Enter to continue...")
     input()
@@ -335,7 +442,15 @@ def main():
     print("Estimating pixel size from canvas...")
     pixel_size = estimate_pixel_size(canvas_img_bgr)
     print(f"Estimated pixel size: {pixel_size}x{pixel_size}")
-    # --- END ESTIMATION ---
+
+    # --- NEW: BUILD PIXEL MAP ONCE ---
+    print("Building pixel map...")
+    preview_positions = get_preview_positions_from_estimation(
+        canvas_img_bgr, pixel_size
+    )
+    pixel_map = build_pixel_map(canvas_img_bgr, pixel_size, preview_positions)
+    print(f"Built pixel map with {len(pixel_map)} pixels")
+    # --- END NEW ---
 
     # Detect colors and their positions from the selected palette region
     color_position_map = detect_palette_colors(
@@ -362,43 +477,29 @@ def main():
         if keyboard.is_pressed("esc"):
             print("Stopped by user.")
             break
-        # print(f"Checking color {color['name']} ({color['rgb']}), premium={color['premium']}, bought={color.get('bought')}")
+
         if color["premium"] == True and color.get("bought") == False:
-            # print(f"Skipping premium color {color['name']} as it is not bought.")
             continue  # Skip not bought premium colors
 
         target_rgb = tuple(color["rgb"])
         if target_rgb in color_position_map:
-            # print(f"Processing color {color['name']} ({color['rgb']})")
-            # Click the color in the palette to select it
-            px, py = color_position_map[target_rgb]
-            pyautogui.click(px, py)
-            time.sleep(0.2)
-
-            # Scan canvas for pixels that need painting with this color
-            img_rgb = get_screen(canvas_region)
-            img_bgr = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
-
-            # Create a debug image only for the first color to avoid spam
-            debug_file = "debug_painting_scan.png" if is_first_color else None
-
-            # --- FIX: Convert target color to BGR before passing to function ---
+            # --- NEW: Use pre-built pixel map instead of scanning ---
             target_bgr = target_rgb[::-1]
-            positions = find_pixels_to_paint(
-                img_bgr, target_bgr, pixel_size, debug_filename=debug_file
-            )
+            positions = find_pixels_to_paint_from_map(pixel_map, target_bgr)
             print(f"Found {len(positions)} spots to paint for {color['name']}")
+            # --- END NEW ---
 
-            is_first_color = False  # Ensure debug image is only created once
-
+            if positions:
+            # Click the color in the palette to select it
+                px, py = color_position_map[target_rgb]
+                pyautogui.click(px, py)
+                time.sleep(0.2)            
+            
             if positions:
                 auto_click_positions(
                     positions, offset=(canvas_region[0], canvas_region[1])
                 )
-            time.sleep(0.5)
-        else:
-            # This color was not found in the user-selected palette region
-            pass
+            # time.sleep(0.5)
 
 
 if __name__ == "__main__":
