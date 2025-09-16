@@ -1,13 +1,11 @@
-import tkinter as tk
+import json
+import os
 from tkinter import ttk, messagebox, filedialog
 from PIL import Image, ImageTk
 import threading
 import queue
-import os
-from data import color_palette
+import tkinter as tk
 import cv2
-import pyautogui
-import json
 
 class RegionSelector:
     """Overlay window for drag-to-select region functionality"""
@@ -113,12 +111,13 @@ class PlaceBotGUI:
         self.root.title("Place Bot - Pixel Art Automation")
         self.root.geometry("800x800")
         
-        # Load bought status on startup
-        self.load_bought_status()
+        # Load data
+        self.color_palette = self.load_color_palette()
+        self.user_settings = self.load_user_settings()
         
         # State variables
-        self.canvas_region = None
-        self.palette_region = None
+        self.canvas_region = self.user_settings.get('preferences', {}).get('last_canvas_region')
+        self.palette_region = self.user_settings.get('preferences', {}).get('last_palette_region')
         self.pixel_map = None
         self.color_position_map = None
         self.pixel_size = None
@@ -130,7 +129,87 @@ class PlaceBotGUI:
         
         self.setup_ui()
         self.process_queue()
-    
+        
+        # Load saved regions if they exist
+        self.load_saved_regions()
+
+    def load_color_palette(self):
+        """Load color palette from JSON file"""
+        try:
+            with open('colors.json', 'r') as f:
+                data = json.load(f)
+                return data['color_palette']
+        except FileNotFoundError:
+            messagebox.showerror("Error", "colors.json not found! Please create the color palette file.")
+            return []
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load colors.json: {e}")
+            return []
+
+    def load_user_settings(self):
+        """Load user settings from JSON file"""
+        default_settings = {
+            "bought_colors": {},
+            "preferences": {
+                "color_tolerance": 5,
+                "click_delay": 20,
+                "auto_save_regions": True
+            },
+            "enabled_colors": {}
+        }
+        
+        try:
+            if os.path.exists('user_settings.json'):
+                with open('user_settings.json', 'r') as f:
+                    settings = json.load(f)
+                    # Merge with defaults to handle missing keys
+                    for key in default_settings:
+                        if key not in settings:
+                            settings[key] = default_settings[key]
+                    return settings
+            else:
+                return default_settings
+        except Exception as e:
+            print(f"Failed to load user settings: {e}")
+            return default_settings
+
+    def save_user_settings(self):
+        """Save user settings to JSON file"""
+        try:
+            # Update settings with current values
+            self.user_settings['preferences']['color_tolerance'] = self.tolerance_var.get()
+            self.user_settings['preferences']['click_delay'] = self.delay_var.get()
+            
+            # Save current regions
+            if self.canvas_region:
+                self.user_settings['preferences']['last_canvas_region'] = self.canvas_region
+            if self.palette_region:
+                self.user_settings['preferences']['last_palette_region'] = self.palette_region
+            
+            # Save enabled colors
+            for color in self.color_palette:
+                if color['name'] in self.color_vars:
+                    self.user_settings['enabled_colors'][color['name']] = self.color_vars[color['name']].get()
+            
+            # Save bought colors
+            for color in self.color_palette:
+                if color.get('premium', False) and color['name'] in self.bought_vars:
+                    self.user_settings['bought_colors'][color['name']] = self.bought_vars[color['name']].get()
+            
+            with open('user_settings.json', 'w') as f:
+                json.dump(self.user_settings, f, indent=2)
+                
+        except Exception as e:
+            print(f"Failed to save user settings: {e}")
+
+    def load_saved_regions(self):
+        """Load and display saved regions"""
+        if self.canvas_region:
+            self.canvas_status.config(text=f"Loaded: {self.canvas_region}", foreground="blue")
+        if self.palette_region:
+            self.palette_status.config(text=f"Loaded: {self.palette_region}", foreground="blue")
+        self.check_ready_for_analysis()
+
     def setup_ui(self):
         """Create the main UI layout"""
         # Create main container with tabs
@@ -213,17 +292,21 @@ class PlaceBotGUI:
         settings_frame = ttk.LabelFrame(self.setup_tab, text="Settings", padding=10)
         settings_frame.pack(fill='x', padx=10, pady=5)
         
+        # Load saved settings
+        saved_tolerance = self.user_settings['preferences']['color_tolerance']
+        saved_delay = self.user_settings['preferences']['click_delay']
+        
         # Tolerance setting
         tolerance_frame = ttk.Frame(settings_frame)
         tolerance_frame.pack(fill='x', pady=2)
         ttk.Label(tolerance_frame, text="Color Tolerance:").pack(side='left')
-        self.tolerance_var = tk.IntVar(value=1)
-        tolerance_scale = ttk.Scale(tolerance_frame, from_=0, to=20, variable=self.tolerance_var, 
+        self.tolerance_var = tk.IntVar(value=saved_tolerance)
+        tolerance_scale = ttk.Scale(tolerance_frame, from_=1, to=20, variable=self.tolerance_var, 
                                    orient='horizontal')
         tolerance_scale.pack(side='right', fill='x', expand=True, padx=(10, 0))
         
         # Tolerance value display
-        self.tolerance_label = ttk.Label(tolerance_frame, text="1")
+        self.tolerance_label = ttk.Label(tolerance_frame, text=str(saved_tolerance))
         self.tolerance_label.pack(side='right', padx=(5, 10))
         tolerance_scale.configure(command=self.update_tolerance_label)
         
@@ -231,23 +314,25 @@ class PlaceBotGUI:
         delay_frame = ttk.Frame(settings_frame)
         delay_frame.pack(fill='x', pady=2)
         ttk.Label(delay_frame, text="Click Delay (ms):").pack(side='left')
-        self.delay_var = tk.IntVar(value=15)
+        self.delay_var = tk.IntVar(value=saved_delay)
         delay_scale = ttk.Scale(delay_frame, from_=10, to=100, variable=self.delay_var, 
                                orient='horizontal')
         delay_scale.pack(side='right', fill='x', expand=True, padx=(10, 0))
         
         # Delay value display
-        self.delay_label = ttk.Label(delay_frame, text="15")
+        self.delay_label = ttk.Label(delay_frame, text=str(saved_delay))
         self.delay_label.pack(side='right', padx=(5, 10))
         delay_scale.configure(command=self.update_delay_label)
     
     def update_tolerance_label(self, value):
-        """Update tolerance value display"""
+        """Update tolerance value display and save"""
         self.tolerance_label.config(text=f"{int(float(value))}")
-    
+        self.save_user_settings()
+
     def update_delay_label(self, value):
-        """Update delay value display"""
+        """Update delay value display and save"""
         self.delay_label.config(text=f"{int(float(value))}")
+        self.save_user_settings()
     
     def create_colors_tab(self):
         """Color control tab for enabling/disabling colors"""
@@ -279,9 +364,9 @@ class PlaceBotGUI:
         
         # Create color checkboxes
         self.color_vars = {}
-        self.bought_vars = {}  # Track bought status
+        self.bought_vars = {}
         
-        for color in color_palette:
+        for color in self.color_palette:
             color_frame = ttk.Frame(scrollable_frame)
             color_frame.pack(fill='x', padx=10, pady=2)
             
@@ -293,18 +378,22 @@ class PlaceBotGUI:
             hex_color = f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
             color_canvas.create_rectangle(0, 0, 30, 20, fill=hex_color, outline="")
             
+            # Load saved state
+            is_bought = self.user_settings['bought_colors'].get(color['name'], False)
+            is_enabled = self.user_settings['enabled_colors'].get(color['name'], 
+                        not color.get('premium', False) or is_bought)
+            
             # Enable/disable checkbox
-            is_available = not color.get('premium', False) or color.get('bought', False)
-            var = tk.BooleanVar(value=is_available)
+            var = tk.BooleanVar(value=is_enabled)
             self.color_vars[color['name']] = var
             
-            checkbox = ttk.Checkbutton(color_frame, variable=var)
+            checkbox = ttk.Checkbutton(color_frame, variable=var, command=self.save_user_settings)
             checkbox.pack(side='left', padx=5)
             
             # Color name label
             label_text = color['name']
             if color.get('premium', False):
-                if color.get('bought', False):
+                if is_bought:
                     label_text += " (Premium - Bought)"
                     label_color = "green"
                 else:
@@ -319,7 +408,7 @@ class PlaceBotGUI:
             
             # Bought status toggle (only for premium colors)
             if color.get('premium', False):
-                bought_var = tk.BooleanVar(value=color.get('bought', False))
+                bought_var = tk.BooleanVar(value=is_bought)
                 self.bought_vars[color['name']] = bought_var
                 
                 bought_checkbox = ttk.Checkbutton(
@@ -334,72 +423,42 @@ class PlaceBotGUI:
         scrollbar.pack(side="right", fill="y")
 
     def toggle_bought_status(self, color):
-        """Toggle bought status and update data.py"""
-        color_name = color['name']
-        new_bought_status = self.bought_vars[color_name].get()
-        
-        # Update the color_palette data
-        for c in color_palette:
-            if c['name'] == color_name:
-                c['bought'] = new_bought_status
-                break
-        
-        # Save to data.py file
-        self.save_color_data()
-        
-        # Refresh the color tab display
+        """Toggle bought status and save settings"""
+        self.save_user_settings()
         self.refresh_colors_tab()
 
-    def save_color_data(self):
-        """Save bought status to a separate JSON file (much simpler!)"""
-        try:
-            # Extract only the bought status for premium colors
-            bought_status = {}
-            for color in color_palette:
-                if color.get('premium', False):
-                    bought_status[color['name']] = color.get('bought', False)
-            
-            # Save to JSON file
-            with open('bought_colors.json', 'w') as f:
-                json.dump(bought_status, f, indent=2)
-            
-            print("Saved bought status to bought_colors.json")
-            
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to save bought status: {e}")
-            
     def refresh_colors_tab(self):
         """Refresh the colors tab to show updated bought status"""
-        # Clear the current colors tab
         for widget in self.colors_tab.winfo_children():
             widget.destroy()
-            
-        # Recreate the colors tab
         self.create_colors_tab()
 
     def enable_available_colors(self):
         """Enable all available colors (free + bought premium colors)"""
-        for color in color_palette:
-            is_available = not color.get('premium', False) or color.get('bought', False)
+        for color in self.color_palette:
+            is_bought = self.user_settings['bought_colors'].get(color['name'], False)
+            is_available = not color.get('premium', False) or is_bought
             if color['name'] in self.color_vars:
                 self.color_vars[color['name']].set(is_available)
-                
-    def load_bought_status(self):
-        """Load bought status from JSON file on startup"""
-        try:
-            if os.path.exists('bought_colors.json'):
-                with open('bought_colors.json', 'r') as f:
-                    bought_status = json.load(f)
-                
-                # Apply to color_palette
-                for color in color_palette:
-                    if color['name'] in bought_status:
-                        color['bought'] = bought_status[color['name']]
-                        
-                print("Loaded bought status from bought_colors.json")
-                        
-        except Exception as e:
-            print(f"Failed to load bought status: {e}")
+        self.save_user_settings()
+
+    def enable_only_free(self):
+        """Enable only free colors"""
+        for color in self.color_palette:
+            is_free = not color.get('premium', False)
+            if color['name'] in self.color_vars:
+                self.color_vars[color['name']].set(is_free)
+        self.save_user_settings()
+
+    def enable_all_colors(self):
+        for var in self.color_vars.values():
+            var.set(True)
+        self.save_user_settings()
+
+    def disable_all_colors(self):
+        for var in self.color_vars.values():
+            var.set(False)
+        self.save_user_settings()
 
     def create_preview_tab(self):
         """Preview tab for showing debug images and analysis results"""
@@ -490,7 +549,7 @@ class PlaceBotGUI:
         if region:
             self.canvas_region = region
             self.canvas_status.config(text=f"Selected: {region}", foreground="green")
-            self.log_message(f"Canvas region selected: {region}")
+            self.save_user_settings()  # Save the new region
         else:
             self.log_message("Canvas region selection cancelled")
         self.check_ready_for_analysis()
@@ -501,7 +560,7 @@ class PlaceBotGUI:
         if region:
             self.palette_region = region
             self.palette_status.config(text=f"Selected: {region}", foreground="green")
-            self.log_message(f"Palette region selected: {region}")
+            self.save_user_settings()  # Save the new region
         else:
             self.log_message("Palette region selection cancelled")
         self.check_ready_for_analysis()
@@ -705,18 +764,21 @@ class PlaceBotGUI:
     def enable_all_colors(self):
         for var in self.color_vars.values():
             var.set(True)
-    
+        self.save_user_settings()
+
     def disable_all_colors(self):
         for var in self.color_vars.values():
             var.set(False)
-    
+        self.save_user_settings()
+
     def enable_only_free(self):
         """Enable only free colors"""
-        for color in color_palette:
+        for color in self.color_palette:
             is_free = not color.get('premium', False)
             if color['name'] in self.color_vars:
                 self.color_vars[color['name']].set(is_free)
-    
+        self.save_user_settings()
+
     def load_debug_image(self, event=None):
         """Load and display debug image"""
         image_type = self.image_var.get()

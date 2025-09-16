@@ -6,7 +6,7 @@ import keyboard
 import math
 import cv2
 import statistics
-from data import color_palette
+import json
 
 
 def get_screen(region=None):
@@ -398,7 +398,20 @@ def find_pixels_to_paint_from_map(pixel_map, target_bgr, tolerance=5):
     return matches
 
 
+def load_color_palette():
+    """Load color palette from JSON file"""
+    try:
+        with open('colors.json', 'r') as f:
+            data = json.load(f)
+            return data['color_palette']
+    except Exception as e:
+        print(f"Failed to load colors.json: {e}")
+        return []
+
+
 def main():
+    color_palette = load_color_palette()
+
     print("Focus the browser window. Press Enter to continue...")
     input()
     canvas_region = select_region()
