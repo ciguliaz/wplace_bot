@@ -70,7 +70,7 @@ def find_color_positions(img, target_color, tolerance=1, grid_size=1000):
     return matches
 
 
-def detect_palette_colors(palette_img_rgb, palette_region, known_colors, tolerance=15):
+def detect_palette_colors(palette_img_rgb, palette_region, known_colors, tolerance=3):
     """
     Detects color swatches by searching for each known color individually.
     Expects an RGB image.
@@ -193,7 +193,7 @@ def estimate_pixel_size(img, min_size=5, max_size=50, debug_filename="debug_size
     return estimated_size
 
 
-def find_pixels_to_paint(img, target_color_bgr, pixel_size, tolerance=5, debug_filename=None):
+def find_pixels_to_paint(img, target_color_bgr, pixel_size, tolerance=1, debug_filename=None):
     """
     Finds pixels to paint. Expects a BGR image and a BGR target color.
     """
