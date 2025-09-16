@@ -155,13 +155,12 @@ class PlaceBotGUI:
     def load_user_settings(self):
         """Load user settings from JSON file"""
         default_settings = {
-            "bought_colors": {},  # Will use color IDs as keys
+            "colors": {},  # New consolidated structure
             "preferences": {
                 "color_tolerance": 5,
                 "click_delay": 20,
                 "auto_save_regions": True
-            },
-            "enabled_colors": {}  # Will use color IDs as keys
+            }
         }
         
         try:
@@ -169,8 +168,9 @@ class PlaceBotGUI:
                 with open('user_settings.json', 'r') as f:
                     settings = json.load(f)
                     
-                    # Convert old name-based settings to ID-based if needed
-                    settings = self.migrate_settings_to_ids(settings)
+                    # Check if old format and migrate
+                    if 'bought_colors' in settings or 'enabled_colors' in settings:
+                        settings = self.migrate_old_format(settings)
                     
                     # Merge with defaults
                     for key in default_settings:
@@ -183,50 +183,38 @@ class PlaceBotGUI:
             print(f"Failed to load user settings: {e}")
             return default_settings
 
-    def migrate_settings_to_ids(self, settings):
-        """Convert name-based settings to ID-based settings"""
-        # Create name-to-id mapping for valid colors only
-        name_to_id = {color['name']: color['id'] for color in self.color_palette}
+    def migrate_old_format(self, old_settings):
+        """Convert old format to new consolidated format"""
+        new_settings = {
+            "colors": {},
+            "preferences": old_settings.get('preferences', {})
+        }
         
-        # Convert bought_colors from names to IDs
-        if 'bought_colors' in settings:
-            old_bought = settings['bought_colors']
-            new_bought = {}
-            for name, value in old_bought.items():
-                if name in name_to_id:
-                    color_id = str(name_to_id[name])
-                    # Check if this color is actually premium and bought in colors.json
-                    for color in self.color_palette:
-                        if color['name'] == name and color.get('premium', False):
-                            # Use the bought status from colors.json as source of truth
-                            new_bought[color_id] = color.get('bought', False)
-                            break
-            settings['bought_colors'] = new_bought
-    
-        # Convert enabled_colors from names to IDs
-        if 'enabled_colors' in settings:
-            old_enabled = settings['enabled_colors']
-            new_enabled = {}
-            for name, value in old_enabled.items():
-                if name in name_to_id:
-                    color_id = str(name_to_id[name])
-                    # For premium colors, only enable if bought
-                    for color in self.color_palette:
-                        if color['name'] == name:
-                            if color.get('premium', False):
-                                is_bought = color.get('bought', False)
-                                new_enabled[color_id] = value and is_bought
-                            else:
-                                new_enabled[color_id] = value
-                            break
-            settings['enabled_colors'] = new_enabled
-    
-        return settings
+        # Get all color IDs
+        all_color_ids = set()
+        if 'bought_colors' in old_settings:
+            all_color_ids.update(old_settings['bought_colors'].keys())
+        if 'enabled_colors' in old_settings:
+            all_color_ids.update(old_settings['enabled_colors'].keys())
+        
+        # Convert to new format
+        for color_id in all_color_ids:
+            color_data = {}
+            
+            if color_id in old_settings.get('enabled_colors', {}):
+                color_data['enabled'] = old_settings['enabled_colors'][color_id]
+            
+            if color_id in old_settings.get('bought_colors', {}):
+                color_data['bought'] = old_settings['bought_colors'][color_id]
+            
+            new_settings['colors'][color_id] = color_data
+        
+        return new_settings
 
     def save_user_settings(self):
-        """Save user settings to JSON file using color IDs"""
+        """Save user settings to JSON file using new consolidated format"""
         try:
-            # Update settings with current values
+            # Update preferences
             self.user_settings['preferences']['color_tolerance'] = self.tolerance_var.get()
             self.user_settings['preferences']['click_delay'] = self.delay_var.get()
             
@@ -236,17 +224,21 @@ class PlaceBotGUI:
             if self.palette_region:
                 self.user_settings['preferences']['last_palette_region'] = self.palette_region
             
-            # Save enabled colors using IDs
+            # Save color settings using new format
             for color in self.color_palette:
                 color_id = str(color['id'])
+                
+                # Initialize color data if not exists
+                if color_id not in self.user_settings['colors']:
+                    self.user_settings['colors'][color_id] = {}
+                
+                # Save enabled status
                 if color['name'] in self.color_vars:
-                    self.user_settings['enabled_colors'][color_id] = self.color_vars[color['name']].get()
-            
-            # Save bought colors using IDs
-            for color in self.color_palette:
+                    self.user_settings['colors'][color_id]['enabled'] = self.color_vars[color['name']].get()
+                
+                # Save bought status (only for premium colors)
                 if color.get('premium', False) and color['name'] in self.bought_vars:
-                    color_id = str(color['id'])
-                    self.user_settings['bought_colors'][color_id] = self.bought_vars[color['name']].get()
+                    self.user_settings['colors'][color_id]['bought'] = self.bought_vars[color['name']].get()
             
             with open('user_settings.json', 'w') as f:
                 json.dump(self.user_settings, f, indent=2)
@@ -430,15 +422,16 @@ class PlaceBotGUI:
             hex_color = f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
             color_canvas.create_rectangle(0, 0, 30, 20, fill=hex_color, outline="")
             
-            # Load saved state using color ID
+            # Load saved state using new format
             color_id = str(color['id'])
+            color_settings = self.user_settings['colors'].get(color_id, {})
             
-            # Get bought status from colors.json (source of truth)
-            is_bought = color.get('bought', False) if color.get('premium', False) else True
+            # Get bought status (colors.json as source of truth, user_settings as override)
+            is_bought = color_settings.get('bought', color.get('bought', False)) if color.get('premium', False) else True
             
-            # Get enabled status from user settings
-            is_enabled = self.user_settings['enabled_colors'].get(color_id, 
-                        not color.get('premium', False) or is_bought)
+            # Get enabled status
+            default_enabled = not color.get('premium', False) or is_bought
+            is_enabled = color_settings.get('enabled', default_enabled)
             
             # Enable/disable checkbox
             var = tk.BooleanVar(value=is_enabled)
@@ -447,7 +440,7 @@ class PlaceBotGUI:
             checkbox = ttk.Checkbutton(color_frame, variable=var, command=self.save_user_settings)
             checkbox.pack(side='left', padx=5)
             
-            # Color name label (without ID)
+            # Color name label
             label_text = color['name']
             if color.get('premium', False):
                 if is_bought:
@@ -480,24 +473,28 @@ class PlaceBotGUI:
         scrollbar.pack(side="right", fill="y")
 
     def toggle_bought_status(self, color):
-        """Toggle bought status in colors.json and update user settings"""
+        """Toggle bought status and save settings"""
         try:
             color_name = color['name']
+            color_id = str(color['id'])
             new_bought_status = self.bought_vars[color_name].get()
             
-            # Update the color in the palette
+            # Update user settings with new bought status
+            if color_id not in self.user_settings['colors']:
+                self.user_settings['colors'][color_id] = {}
+            self.user_settings['colors'][color_id]['bought'] = new_bought_status
+            
+            # Also update the color in palette for colors.json
             for c in self.color_palette:
                 if c['name'] == color_name:
                     c['bought'] = new_bought_status
                     break
             
-            # Update colors.json file
+            # Save to both files
             self.save_colors_json()
-            
-            # Update user settings
             self.save_user_settings()
             
-            # Refresh the color tab to show updated status
+            # Refresh the color tab
             self.refresh_colors_tab()
             
         except Exception as e:
@@ -530,9 +527,13 @@ class PlaceBotGUI:
     def enable_available_colors(self):
         """Enable all available colors (free + bought premium colors)"""
         for color in self.color_palette:
-            # Use colors.json as source of truth for bought status
-            is_bought = color.get('bought', False) if color.get('premium', False) else True
+            color_id = str(color['id'])
+            color_settings = self.user_settings['colors'].get(color_id, {})
+            
+            # Get bought status
+            is_bought = color_settings.get('bought', color.get('bought', False)) if color.get('premium', False) else True
             is_available = not color.get('premium', False) or is_bought
+            
             if color['name'] in self.color_vars:
                 self.color_vars[color['name']].set(is_available)
         self.save_user_settings()
@@ -540,9 +541,6 @@ class PlaceBotGUI:
     def enable_only_free(self):
         """Enable only free colors"""
         for color in self.color_palette:
-            if color.get('ignore', False):
-                continue
-                
             is_free = not color.get('premium', False)
             if color['name'] in self.color_vars:
                 self.color_vars[color['name']].set(is_free)
@@ -746,13 +744,16 @@ class PlaceBotGUI:
             import pyautogui
             import time
             
-            # Get enabled colors, skipping ignored ones
-            enabled_colors = [
-                color for color in self.color_palette 
-                if (not color.get('ignore', False) and 
-                    color['name'] in self.color_vars and 
-                    self.color_vars[color['name']].get())
-            ]
+            # Get enabled colors using new format
+            enabled_colors = []
+            for color in self.color_palette:
+                color_id = str(color['id'])
+                color_settings = self.user_settings['colors'].get(color_id, {})
+                
+                # Check if enabled
+                is_enabled = color_settings.get('enabled', True)
+                if is_enabled and color['name'] in self.color_vars and self.color_vars[color['name']].get():
+                    enabled_colors.append(color)
             
             total_colors = len(enabled_colors)
             
