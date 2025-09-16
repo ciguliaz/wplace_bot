@@ -9,4 +9,4 @@ __pycache__
 build
 dist
 
-bought_colors.json
+user_settings.json
