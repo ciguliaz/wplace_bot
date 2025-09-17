@@ -422,12 +422,12 @@ class PlaceBotGUI:
             hex_color = f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
             color_canvas.create_rectangle(0, 0, 30, 20, fill=hex_color, outline="")
             
-            # Load saved state using new format
+            # Load saved state using ONLY user_settings.json
             color_id = str(color['id'])
             color_settings = self.user_settings['colors'].get(color_id, {})
             
-            # Get bought status (colors.json as source of truth, user_settings as override)
-            is_bought = color_settings.get('bought', color.get('bought', False)) if color.get('premium', False) else True
+            # Get bought status ONLY from user_settings.json
+            is_bought = color_settings.get('bought', False) if color.get('premium', False) else True
             
             # Get enabled status
             default_enabled = not color.get('premium', False) or is_bought
@@ -473,25 +473,18 @@ class PlaceBotGUI:
         scrollbar.pack(side="right", fill="y")
 
     def toggle_bought_status(self, color):
-        """Toggle bought status and save settings"""
+        """Toggle bought status and save ONLY to user_settings.json"""
         try:
             color_name = color['name']
             color_id = str(color['id'])
             new_bought_status = self.bought_vars[color_name].get()
             
-            # Update user settings with new bought status
+            # Update ONLY user_settings.json
             if color_id not in self.user_settings['colors']:
                 self.user_settings['colors'][color_id] = {}
             self.user_settings['colors'][color_id]['bought'] = new_bought_status
             
-            # Also update the color in palette for colors.json
-            for c in self.color_palette:
-                if c['name'] == color_name:
-                    c['bought'] = new_bought_status
-                    break
-            
-            # Save to both files
-            self.save_colors_json()
+            # Save user settings
             self.save_user_settings()
             
             # Refresh the color tab
@@ -500,38 +493,14 @@ class PlaceBotGUI:
         except Exception as e:
             print(f"Failed to toggle bought status: {e}")
 
-    def save_colors_json(self):
-        """Save the updated color palette back to colors.json"""
-        try:
-            # Read the current colors.json to preserve structure
-            with open('colors.json', 'r') as f:
-                data = json.load(f)
-            
-            # Update the palette with current bought status
-            # Create a mapping of our filtered palette back to the full palette
-            for filtered_color in self.color_palette:
-                for full_color in data['color_palette']:
-                    if full_color['id'] == filtered_color['id']:
-                        full_color['bought'] = filtered_color.get('bought', False)
-                        break
-            
-            # Write back to file
-            with open('colors.json', 'w') as f:
-                json.dump(data, f, indent=2)
-                
-            print("Updated colors.json with new bought status")
-            
-        except Exception as e:
-            print(f"Failed to save colors.json: {e}")
-
     def enable_available_colors(self):
         """Enable all available colors (free + bought premium colors)"""
         for color in self.color_palette:
             color_id = str(color['id'])
             color_settings = self.user_settings['colors'].get(color_id, {})
             
-            # Get bought status
-            is_bought = color_settings.get('bought', color.get('bought', False)) if color.get('premium', False) else True
+            # Get bought status ONLY from user_settings
+            is_bought = color_settings.get('bought', False) if color.get('premium', False) else True
             is_available = not color.get('premium', False) or is_bought
             
             if color['name'] in self.color_vars:

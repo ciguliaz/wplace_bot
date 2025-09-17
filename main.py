@@ -7,6 +7,7 @@ import math
 import cv2
 import statistics
 import json
+import os
 
 
 def get_screen(region=None):
@@ -409,8 +410,30 @@ def load_color_palette():
         return []
 
 
+def load_user_settings():
+    """Load user settings to get bought status"""
+    try:
+        if os.path.exists('user_settings.json'):
+            with open('user_settings.json', 'r') as f:
+                return json.load(f)
+        return {"colors": {}}
+    except Exception as e:
+        print(f"Failed to load user settings: {e}")
+        return {"colors": {}}
+
+
+def is_color_bought(color, user_settings):
+    """Check if a premium color is bought"""
+    if not color.get('premium', False):
+        return True  # Free colors are always "bought"
+    
+    color_id = str(color['id'])
+    return user_settings.get('colors', {}).get(color_id, {}).get('bought', False)
+
+
 def main():
     color_palette = load_color_palette()
+    user_settings = load_user_settings()
 
     print("Focus the browser window. Press Enter to continue...")
     input()
@@ -461,8 +484,10 @@ def main():
             print("Stopped by user.")
             break
 
-        if color["premium"] == True and color.get("bought") == False:
-            continue  # Skip not bought premium colors
+        # Check bought status from user_settings.json ONLY
+        if not is_color_bought(color, user_settings):
+            print(f"Skipping {color['name']} - not bought")
+            continue
 
         target_rgb = tuple(color["rgb"])
         if target_rgb in color_position_map:

@@ -185,7 +185,7 @@
     },
     "41": {
       "enabled": false,
-      "bought": false
+      "bought": true
     },
     "3": {
       "enabled": true
@@ -221,19 +221,19 @@
   },
   "preferences": {
     "color_tolerance": 1,
-    "click_delay": 10,
+    "click_delay": 15,
     "auto_save_regions": true,
     "last_canvas_region": [
-      1047,
-      67,
-      838,
-      798
+      1049,
+      50,
+      825,
+      845
     ],
     "last_palette_region": [
-      1017,
-      911,
-      893,
-      66
+      1015,
+      914,
+      898,
+      60
     ]
   }
 }
