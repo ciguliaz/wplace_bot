@@ -396,6 +396,22 @@ class PlaceBotGUI:
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
         
+        # ADD MOUSE WHEEL SCROLLING SUPPORT:
+        def on_mousewheel(event):
+            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        
+        # Bind mouse wheel to canvas and scrollable frame
+        canvas.bind("<MouseWheel>", on_mousewheel)
+        scrollable_frame.bind("<MouseWheel>", on_mousewheel)
+        
+        # Also bind to the main colors_tab for when mouse is over empty areas
+        self.colors_tab.bind("<MouseWheel>", on_mousewheel)
+        
+        # Make sure canvas gets focus when mouse enters
+        def on_enter(event):
+            canvas.focus_set()
+        canvas.bind("<Enter>", on_enter)
+        
         # Control buttons
         control_frame = ttk.Frame(self.colors_tab)
         control_frame.pack(fill='x', padx=10, pady=5)
@@ -404,9 +420,9 @@ class PlaceBotGUI:
                   command=self.enable_all_colors).pack(side='left', padx=5)
         ttk.Button(control_frame, text="Disable All", 
                   command=self.disable_all_colors).pack(side='left', padx=5)
-        ttk.Button(control_frame, text="Only Free Colors", 
+        ttk.Button(control_frame, text="Free Colors", 
                   command=self.enable_only_free).pack(side='left', padx=5)
-        ttk.Button(control_frame, text="Available Colors (Free + Bought)", 
+        ttk.Button(control_frame, text="Available Colors", 
                   command=self.enable_available_colors).pack(side='left', padx=5)
         
         # Create color checkboxes
@@ -417,9 +433,13 @@ class PlaceBotGUI:
             color_frame = ttk.Frame(scrollable_frame)
             color_frame.pack(fill='x', padx=10, pady=2)
             
+            # BIND MOUSE WHEEL TO EACH COLOR FRAME TOO:
+            color_frame.bind("<MouseWheel>", on_mousewheel)
+            
             # Color preview
             color_canvas = tk.Canvas(color_frame, width=30, height=20)
             color_canvas.pack(side='left', padx=5)
+            color_canvas.bind("<MouseWheel>", on_mousewheel)  # ADD THIS
             
             rgb = color['rgb']
             hex_color = f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
@@ -442,6 +462,7 @@ class PlaceBotGUI:
             
             checkbox = ttk.Checkbutton(color_frame, variable=var, command=self.save_user_settings)
             checkbox.pack(side='left', padx=5)
+            checkbox.bind("<MouseWheel>", on_mousewheel)  # ADD THIS
             
             # Color name label
             label_text = color['name']
@@ -458,6 +479,11 @@ class PlaceBotGUI:
             
             name_label = ttk.Label(color_frame, text=label_text, foreground=label_color)
             name_label.pack(side='left', padx=5)
+            name_label.bind("<MouseWheel>", on_mousewheel)  # ADD THIS
+            
+            # Store reference to the label for later updates
+            setattr(name_label, 'color_id', color['id'])
+            setattr(name_label, 'color_name', color['name'])
             
             # For premium colors, add bought toggle checkbox
             if color.get('premium', False):
@@ -471,7 +497,7 @@ class PlaceBotGUI:
                     command=lambda c=color: self.toggle_bought_status(c)
                 )
                 bought_checkbox.pack(side='left', padx=10)
-    
+                bought_checkbox.bind("<MouseWheel>", on_mousewheel)
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
 
@@ -490,12 +516,37 @@ class PlaceBotGUI:
             # Save user settings
             self.save_user_settings()
             
-            # Refresh the color tab
-            self.refresh_colors_tab()
+            # Update the label color immediately without refreshing the whole panel
+            self.update_color_label(color, new_bought_status)
+            
+            # DON'T refresh the whole tab - this causes freezing and scroll reset
+            # self.refresh_colors_tab()  # REMOVE THIS LINE
             
         except Exception as e:
             print(f"Failed to toggle bought status: {e}")
 
+    def update_color_label(self, color, is_bought):
+        """Update just the color label without refreshing the whole panel"""
+        # Find the label for this specific color and update its appearance
+        color_name = color['name']
+        for widget in self.colors_tab.winfo_children():
+            if isinstance(widget, tk.Canvas):
+                for child in widget.winfo_children():
+                    if isinstance(child, ttk.Frame):
+                        for grandchild in child.winfo_children():
+                            if isinstance(grandchild, ttk.Frame):
+                                # This is a color_frame, check if it's the right one
+                                labels = [w for w in grandchild.winfo_children() if isinstance(w, ttk.Label)]
+                                for label in labels:
+                                    if color_name in label.cget('text'):
+                                        # Update the label
+                                        if color.get('premium', False):
+                                            if is_bought:
+                                                label.config(text=f"{color_name} (Premium)", foreground="green")
+                                            else:
+                                                label.config(text=f"{color_name} (Premium)", foreground="red")
+                                        return
+    
     def enable_available_colors(self):
         """Enable all available colors (free + bought premium colors)"""
         for color in self.color_palette:
