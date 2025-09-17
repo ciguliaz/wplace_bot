@@ -4,3 +4,4 @@ numpy
 pillow
 keyboard
 opencv-python
+pyinstaller
