@@ -1,5 +1,6 @@
 import json
 import os
+import time
 from tkinter import ttk, messagebox, filedialog
 from PIL import Image, ImageTk
 import threading
@@ -159,6 +160,7 @@ class PlaceBotGUI:
             "preferences": {
                 "color_tolerance": 5,
                 "click_delay": 20,
+                "pixel_limit": 50,
                 "auto_save_regions": True
             }
         }
@@ -217,6 +219,7 @@ class PlaceBotGUI:
             # Update preferences
             self.user_settings['preferences']['color_tolerance'] = self.tolerance_var.get()
             self.user_settings['preferences']['click_delay'] = self.delay_var.get()
+            self.user_settings['preferences']['pixel_limit'] = self.pixel_limit_var.get()
             
             # Save current regions
             if self.canvas_region:
@@ -587,6 +590,39 @@ class PlaceBotGUI:
                                   command=self.stop_bot, state='disabled')
         self.stop_btn.pack(side='left', padx=5)
         
+        # Bot Settings Frame
+        bot_settings_frame = ttk.LabelFrame(self.control_tab, text="Bot Settings", padding=10)
+        bot_settings_frame.pack(fill='x', padx=10, pady=5)
+        
+        # Pixel limit setting
+        limit_frame = ttk.Frame(bot_settings_frame)
+        limit_frame.pack(fill='x', pady=5)
+        
+        ttk.Label(limit_frame, text="Pixel Limit (stop after painting):").pack(side='left')
+        
+        # Load saved pixel limit
+        saved_pixel_limit = self.user_settings['preferences'].get('pixel_limit', 50)
+        
+        # Pixel limit input field
+        self.pixel_limit_var = tk.IntVar(value=saved_pixel_limit)
+        self.pixel_limit_entry = ttk.Entry(limit_frame, textvariable=self.pixel_limit_var, width=8)
+        self.pixel_limit_entry.pack(side='right', padx=(5, 0))
+        self.pixel_limit_entry.bind('<KeyRelease>', self.on_pixel_limit_entry_change)
+        self.pixel_limit_entry.bind('<FocusOut>', self.on_pixel_limit_entry_change)
+        
+        ttk.Label(limit_frame, text="pixels").pack(side='right', padx=(5, 5))
+        
+        # Pixel limit slider
+        slider_frame = ttk.Frame(bot_settings_frame)
+        slider_frame.pack(fill='x', pady=2)
+        
+        ttk.Label(slider_frame, text="Quick Select:").pack(side='left')
+        self.pixel_limit_scale = ttk.Scale(slider_frame, from_=1, to=1000, 
+                                          variable=self.pixel_limit_var, 
+                                          orient='horizontal')
+        self.pixel_limit_scale.pack(side='right', fill='x', expand=True, padx=(10, 0))
+        self.pixel_limit_scale.configure(command=self.update_pixel_limit_from_slider)
+
         # Log frame
         log_frame = ttk.LabelFrame(self.control_tab, text="Log", padding=10)
         log_frame.pack(fill='both', expand=True, padx=10, pady=5)
@@ -597,6 +633,39 @@ class PlaceBotGUI:
         
         self.log_text.pack(side='left', fill='both', expand=True)
         log_scrollbar.pack(side='right', fill='y')
+    
+    def update_pixel_limit_from_slider(self, value):
+        """Update pixel limit when slider changes"""
+        # Update the entry field to match slider
+        new_value = int(float(value))
+        self.pixel_limit_var.set(new_value)
+        
+        # Save to user settings
+        self.save_user_settings()
+
+    def on_pixel_limit_entry_change(self, event=None):
+        """Handle manual entry changes for pixel limit"""
+        try:
+            # Get value from entry
+            new_value = self.pixel_limit_var.get()
+            
+            # Validate range
+            if new_value < 1:
+                new_value = 1
+                self.pixel_limit_var.set(new_value)
+            elif new_value > 1000:
+                new_value = 1000
+                self.pixel_limit_var.set(new_value)
+        
+            # Update slider to match entry
+            self.pixel_limit_scale.set(new_value)
+            
+            # Save to user settings
+            self.save_user_settings()
+        
+        except tk.TclError:
+            # Handle invalid input (non-numeric)
+            pass
     
     def select_canvas_region(self):
         """Start canvas region selection with drag functionality"""
@@ -725,9 +794,23 @@ class PlaceBotGUI:
                     enabled_colors.append(color)
             
             total_colors = len(enabled_colors)
+            total_pixels_painted = 0  # Track total pixels painted
+            pixel_limit = self.pixel_limit_var.get()  # Get pixel limit
             
+            self.message_queue.put({
+                'type': 'log',
+                'message': f"Starting bot with pixel limit: {pixel_limit}"
+            })
             for i, color in enumerate(enabled_colors):
                 if not self.is_running:
+                    break
+                
+                # Check if we've reached the pixel limit
+                if total_pixels_painted >= pixel_limit:
+                    self.message_queue.put({
+                        'type': 'log',
+                        'message': f"Pixel limit reached! Painted {total_pixels_painted} pixels."
+                    })
                     break
                 
                 target_rgb = tuple(color["rgb"])
@@ -740,6 +823,16 @@ class PlaceBotGUI:
                                                         tolerance=self.tolerance_var.get())
                 
                 if positions:
+                    # Limit positions to not exceed pixel limit
+                    remaining_pixels = pixel_limit - total_pixels_painted
+                    if len(positions) > remaining_pixels:
+                        positions = positions[:remaining_pixels]
+                
+                    self.message_queue.put({
+                        'type': 'log',
+                        'message': f"Painting {len(positions)} pixels with {color['name']} (Total: {total_pixels_painted + len(positions)}/{pixel_limit})"
+                    })
+                  
                     # Click color in palette
                     px, py = self.color_position_map[target_rgb]
                     pyautogui.click(px, py)
@@ -755,14 +848,20 @@ class PlaceBotGUI:
                             y + self.canvas_region[1]
                         )
                         time.sleep(self.delay_var.get() / 1000.0)
+                        total_pixels_painted += 1
                         
-                        # Update progress
-                        progress = ((i + pos_i/len(positions)) / total_colors) * 100
-                        self.message_queue.put({
-                            'type': 'progress',
-                            'progress': progress,
-                            'status': f"Painting {color['name']} ({pos_i+1}/{len(positions)})"
-                        })
+                        # Update progress every 10 pixels or on last pixel
+                        if pos_i % 10 == 0 or pos_i == len(positions) - 1:
+                            progress = (total_pixels_painted / pixel_limit) * 100
+                            self.message_queue.put({
+                                'type': 'progress',
+                                'progress': min(progress, 100),  # Cap at 100%
+                                'status': f"Painting {color['name']} ({total_pixels_painted}/{pixel_limit} pixels)"
+                            })
+                    
+                        # Check if we've reached the limit
+                        if total_pixels_painted >= pixel_limit:
+                            break
                 
                 # Update progress for completed color
                 progress = ((i + 1) / total_colors) * 100
@@ -771,8 +870,16 @@ class PlaceBotGUI:
                     'progress': progress,
                     'status': f"Completed {color['name']}"
                 })
+                
+                # Check again if we've reached the limit
+                if total_pixels_painted >= pixel_limit:
+                    break
             
-            self.message_queue.put({'type': 'bot_complete'})
+            self.message_queue.put({
+                'type': 'bot_complete',
+                'total_painted': total_pixels_painted,
+                'limit_reached': total_pixels_painted >= pixel_limit
+            })
             
         except Exception as e:
             self.message_queue.put({
@@ -792,12 +899,16 @@ class PlaceBotGUI:
             while True:
                 message = self.message_queue.get_nowait()
                 
-                if message['type'] == 'analysis_complete':
+                # ADD THIS MISSING HANDLER:
+                if message['type'] == 'log':
+                    self.log_message(message['message'])
+                
+                elif message['type'] == 'analysis_complete':
                     self.analyze_btn.config(state='normal', text="Analyze Canvas & Palette")
                     self.analysis_status.config(text=f"Analysis complete! "
-                                              f"Pixel size: {message['pixel_size']}, "
-                                              f"Pixels: {message['pixel_count']}, "
-                                              f"Colors: {message['colors_found']}")
+                                                  f"Pixel size: {message['pixel_size']}, "
+                                                  f"Pixels: {message['pixel_count']}, "
+                                                  f"Colors: {message['colors_found']}")
                     self.start_btn.config(state='normal')
                     self.update_stats()
                     self.log_message(f"Analysis completed successfully. Found {message['pixel_count']} pixels and {message['colors_found']} colors.")
@@ -815,8 +926,15 @@ class PlaceBotGUI:
                     self.is_running = False
                     self.start_btn.config(state='normal')
                     self.stop_btn.config(state='disabled')
-                    self.status_label.config(text="Painting complete!")
-                    self.log_message("Painting completed successfully!")
+                    total_painted = message.get('total_painted', 0)
+                    limit_reached = message.get('limit_reached', False)
+                    
+                    if limit_reached:
+                        self.status_label.config(text=f"Pixel limit reached! ({total_painted} pixels)")
+                        self.log_message(f"Bot stopped - pixel limit reached! Total pixels painted: {total_painted}")
+                    else:
+                        self.status_label.config(text=f"Painting complete! ({total_painted} pixels)")
+                        self.log_message(f"Painting completed successfully! Total pixels painted: {total_painted}")
                     
                 elif message['type'] == 'bot_error':
                     self.is_running = False
@@ -824,7 +942,7 @@ class PlaceBotGUI:
                     self.stop_btn.config(state='disabled')
                     self.status_label.config(text=f"Error: {message['error']}")
                     self.log_message(f"Bot error: {message['error']}")
-                    
+                
         except queue.Empty:
             pass
         

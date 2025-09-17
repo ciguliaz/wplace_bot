@@ -185,9 +185,9 @@ def estimate_pixel_size(img, min_size=5, max_size=50, debug_filename="debug_size
 
     # print(f"Debug: Found {len(preview_sizes)} previews, {len(pixel_sizes)} pixels, {filtered_out} filtered out")
 
-    # Add text to the debug image
-    text = f"Estimated Pixel Size: {estimated_size}"
-    cv2.putText(debug_img, text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+    # # Add text to the debug image
+    # text = f"Estimated Pixel Size: {estimated_size}"
+    # cv2.putText(debug_img, text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
     cv2.imwrite(debug_filename, debug_img)
     print(f"Size estimation debug image saved: {debug_filename}")
 
