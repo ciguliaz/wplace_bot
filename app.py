@@ -526,26 +526,52 @@ class PlaceBotGUI:
             print(f"Failed to toggle bought status: {e}")
 
     def update_color_label(self, color, is_bought):
-        """Update just the color label without refreshing the whole panel"""
-        # Find the label for this specific color and update its appearance
+        """Update just the specific color label using exact color name matching"""
         color_name = color['name']
+        
+        # Find the canvas widget in colors_tab
+        canvas_widget = None
         for widget in self.colors_tab.winfo_children():
             if isinstance(widget, tk.Canvas):
-                for child in widget.winfo_children():
-                    if isinstance(child, ttk.Frame):
-                        for grandchild in child.winfo_children():
-                            if isinstance(grandchild, ttk.Frame):
-                                # This is a color_frame, check if it's the right one
-                                labels = [w for w in grandchild.winfo_children() if isinstance(w, ttk.Label)]
-                                for label in labels:
-                                    if color_name in label.cget('text'):
-                                        # Update the label
-                                        if color.get('premium', False):
-                                            if is_bought:
-                                                label.config(text=f"{color_name} (Premium)", foreground="green")
-                                            else:
-                                                label.config(text=f"{color_name} (Premium)", foreground="red")
-                                        return
+                canvas_widget = widget
+                break
+        
+        if not canvas_widget:
+            return
+        
+        # Find the scrollable frame inside the canvas
+        scrollable_frame = None
+        for child in canvas_widget.winfo_children():
+            if isinstance(child, ttk.Frame):
+                scrollable_frame = child
+                break
+        
+        if not scrollable_frame:
+            return
+        
+        # Search through color frames to find the matching one
+        for color_frame in scrollable_frame.winfo_children():
+            if isinstance(color_frame, ttk.Frame):
+                # Find the label widget in this color frame
+                label_widget = None
+                for widget in color_frame.winfo_children():
+                    if isinstance(widget, ttk.Label):
+                        # Check if this label contains our EXACT color name
+                        label_text = widget.cget('text')
+                        # Use exact matching instead of startswith
+                        if (label_text.startswith(color_name + " (Premium)") or 
+                            label_text.startswith(color_name + " (Free)")):
+                            label_widget = widget
+                            break
+                
+                if label_widget:
+                    # Update this specific label
+                    if color.get('premium', False):
+                        if is_bought:
+                            label_widget.config(text=f"{color_name} (Premium)", foreground="green")
+                        else:
+                            label_widget.config(text=f"{color_name} (Premium)", foreground="red")
+                    return
     
     def enable_available_colors(self):
         """Enable all available colors (free + bought premium colors)"""
