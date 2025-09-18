@@ -8,8 +8,10 @@ import queue
 import tkinter as tk
 import cv2
 
+
 class RegionSelector:
     """Overlay window for drag-to-select region functionality"""
+    
     def __init__(self, callback):
         self.callback = callback
         self.start_x = None
@@ -19,50 +21,41 @@ class RegionSelector:
         # Create fullscreen transparent overlay
         self.overlay = tk.Toplevel()
         self.overlay.attributes('-fullscreen', True)
-        self.overlay.attributes('-alpha', 0.3)  # Semi-transparent
+        self.overlay.attributes('-alpha', 0.3)
         self.overlay.attributes('-topmost', True)
         self.overlay.configure(bg='black')
         
         # Create canvas for drawing selection rectangle
-        self.canvas = tk.Canvas(self.overlay, highlightthickness=0)
+        self.canvas = tk.Canvas(self.overlay, highlightthickness=0, bg='black')
         self.canvas.pack(fill='both', expand=True)
-        self.canvas.configure(bg='black')
         
-        # Bind mouse events
+        # Bind events
         self.canvas.bind('<Button-1>', self.on_click)
         self.canvas.bind('<B1-Motion>', self.on_drag)
         self.canvas.bind('<ButtonRelease-1>', self.on_release)
-        
-        # Bind escape key to cancel
         self.overlay.bind('<Escape>', self.cancel)
         self.overlay.focus_set()
         
         # Instructions
-        instruction_text = "Drag to select region. Press ESC to cancel."
         self.canvas.create_text(
             self.overlay.winfo_screenwidth() // 2, 50,
-            text=instruction_text,
-            fill='white',
-            font=('Arial', 16, 'bold')
+            text="Drag to select region. Press ESC to cancel.",
+            fill='white', font=('Arial', 16, 'bold')
         )
     
     def on_click(self, event):
         """Start selection"""
         self.start_x = event.x
         self.start_y = event.y
-        
-        # Remove previous rectangle if exists
         if self.rect_id:
             self.canvas.delete(self.rect_id)
     
     def on_drag(self, event):
         """Update selection rectangle while dragging"""
         if self.start_x is not None and self.start_y is not None:
-            # Remove previous rectangle
             if self.rect_id:
                 self.canvas.delete(self.rect_id)
             
-            # Draw new rectangle
             self.rect_id = self.canvas.create_rectangle(
                 self.start_x, self.start_y, event.x, event.y,
                 outline='red', width=2, fill='', stipple='gray25'
@@ -71,30 +64,30 @@ class RegionSelector:
     def on_release(self, event):
         """Finish selection and return coordinates"""
         if self.start_x is not None and self.start_y is not None:
-            # Calculate region coordinates
             left = min(self.start_x, event.x)
             top = min(self.start_y, event.y)
             width = abs(event.x - self.start_x)
             height = abs(event.y - self.start_y)
             
-            # Minimum size check
             if width > 10 and height > 10:
                 region = (left, top, width, height)
                 self.close()
                 self.callback(region)
             else:
-                # Too small, show message and continue
                 self.canvas.create_text(
                     event.x, event.y - 20,
                     text="Region too small! Try again.",
-                    fill='yellow',
-                    font=('Arial', 12, 'bold')
+                    fill='yellow', font=('Arial', 12, 'bold')
                 )
-                self.start_x = None
-                self.start_y = None
-                if self.rect_id:
-                    self.canvas.delete(self.rect_id)
-                    self.rect_id = None
+                self._reset_selection()
+    
+    def _reset_selection(self):
+        """Reset selection state"""
+        self.start_x = None
+        self.start_y = None
+        if self.rect_id:
+            self.canvas.delete(self.rect_id)
+            self.rect_id = None
     
     def cancel(self, event=None):
         """Cancel selection"""
@@ -107,12 +100,14 @@ class RegionSelector:
 
 
 class PlaceBotGUI:
+    """Main GUI application for Place Bot"""
+    
     def __init__(self, root):
         self.root = root
         self.root.title("Place Bot - Pixel Art Automation")
         self.root.geometry("800x800")
         
-        # Load data
+        # Initialize data
         self.color_palette = self.load_color_palette()
         self.user_settings = self.load_user_settings()
         
@@ -125,21 +120,26 @@ class PlaceBotGUI:
         self.is_running = False
         self.bot_thread = None
         
-        # Message queue for thread communication
+        # UI variables
+        self.color_vars = {}
+        self.bought_vars = {}
+        self.color_labels = {}
+        
+        # Thread communication
         self.message_queue = queue.Queue()
         
+        # Setup UI and start processing
         self.setup_ui()
-        self.process_queue()
-        
-        # Load saved regions if they exist
         self.load_saved_regions()
+        self.process_queue()
 
+    # ==================== DATA MANAGEMENT ====================
+    
     def load_color_palette(self):
         """Load color palette from JSON file, excluding ignored colors"""
         try:
             with open('colors.json', 'r') as f:
                 data = json.load(f)
-                # Filter out colors with "ignore": true
                 filtered_palette = [
                     color for color in data['color_palette'] 
                     if not color.get('ignore', False)
@@ -156,7 +156,7 @@ class PlaceBotGUI:
     def load_user_settings(self):
         """Load user settings from JSON file"""
         default_settings = {
-            "colors": {},  # New consolidated structure
+            "colors": {},
             "preferences": {
                 "color_tolerance": 5,
                 "click_delay": 20,
@@ -170,9 +170,9 @@ class PlaceBotGUI:
                 with open('user_settings.json', 'r') as f:
                     settings = json.load(f)
                     
-                    # Check if old format and migrate
+                    # Migrate old format if needed
                     if 'bought_colors' in settings or 'enabled_colors' in settings:
-                        settings = self.migrate_old_format(settings)
+                        settings = self._migrate_old_format(settings)
                     
                     # Merge with defaults
                     for key in default_settings:
@@ -185,8 +185,8 @@ class PlaceBotGUI:
             print(f"Failed to load user settings: {e}")
             return default_settings
 
-    def migrate_old_format(self, old_settings):
-        """Convert old format to new consolidated format"""
+    def _migrate_old_format(self, old_settings):
+        """Convert old settings format to new consolidated format"""
         new_settings = {
             "colors": {},
             "preferences": old_settings.get('preferences', {})
@@ -202,19 +202,16 @@ class PlaceBotGUI:
         # Convert to new format
         for color_id in all_color_ids:
             color_data = {}
-            
             if color_id in old_settings.get('enabled_colors', {}):
                 color_data['enabled'] = old_settings['enabled_colors'][color_id]
-            
             if color_id in old_settings.get('bought_colors', {}):
                 color_data['bought'] = old_settings['bought_colors'][color_id]
-            
             new_settings['colors'][color_id] = color_data
         
         return new_settings
 
     def save_user_settings(self):
-        """Save user settings to JSON file using new consolidated format"""
+        """Save user settings to JSON file"""
         try:
             # Update preferences
             self.user_settings['preferences']['color_tolerance'] = self.tolerance_var.get()
@@ -227,11 +224,10 @@ class PlaceBotGUI:
             if self.palette_region:
                 self.user_settings['preferences']['last_palette_region'] = self.palette_region
             
-            # Save color settings using new format
+            # Save color settings
             for color in self.color_palette:
                 color_id = str(color['id'])
                 
-                # Initialize color data if not exists
                 if color_id not in self.user_settings['colors']:
                     self.user_settings['colors'][color_id] = {}
                 
@@ -255,37 +251,35 @@ class PlaceBotGUI:
             self.canvas_status.config(text=f"Loaded: {self.canvas_region}", foreground="blue")
         if self.palette_region:
             self.palette_status.config(text=f"Loaded: {self.palette_region}", foreground="blue")
-        self.check_ready_for_analysis()
+        self._check_ready_for_analysis()
 
+    # ==================== UI SETUP ====================
+    
     def setup_ui(self):
         """Create the main UI layout"""
-        # Create main container with tabs
         notebook = ttk.Notebook(self.root)
         notebook.pack(fill='both', expand=True, padx=10, pady=10)
         
-        # Tab 1: Setup
+        # Create tabs
         self.setup_tab = ttk.Frame(notebook)
-        notebook.add(self.setup_tab, text="Setup")
-        self.create_setup_tab()
-        
-        # Tab 2: Colors
         self.colors_tab = ttk.Frame(notebook)
-        notebook.add(self.colors_tab, text="Color Control")
-        self.create_colors_tab()
-        
-        # Tab 3: Preview
         self.preview_tab = ttk.Frame(notebook)
-        notebook.add(self.preview_tab, text="Preview & Debug")
-        self.create_preview_tab()
-        
-        # Tab 4: Control
         self.control_tab = ttk.Frame(notebook)
+        
+        notebook.add(self.setup_tab, text="Setup")
+        notebook.add(self.colors_tab, text="Color Control")
+        notebook.add(self.preview_tab, text="Preview & Debug")
         notebook.add(self.control_tab, text="Bot Control")
-        self.create_control_tab()
+        
+        # Create tab content
+        self._create_setup_tab()
+        self._create_colors_tab()
+        self._create_preview_tab()
+        self._create_control_tab()
     
-    def create_setup_tab(self):
+    def _create_setup_tab(self):
         """Setup tab for region selection and analysis"""
-        # Instructions frame
+        # Instructions
         instructions_frame = ttk.LabelFrame(self.setup_tab, text="Instructions", padding=10)
         instructions_frame.pack(fill='x', padx=10, pady=5)
         
@@ -298,44 +292,43 @@ class PlaceBotGUI:
         
         ttk.Label(instructions_frame, text=instructions_text, justify='left').pack(anchor='w')
         
-        # Region Selection Frame
+        # Region Selection
         region_frame = ttk.LabelFrame(self.setup_tab, text="Region Selection", padding=10)
         region_frame.pack(fill='x', padx=10, pady=5)
         
         # Canvas region
         canvas_frame = ttk.Frame(region_frame)
         canvas_frame.pack(fill='x', pady=5)
-        
         ttk.Label(canvas_frame, text="Canvas Region:").pack(side='left')
         self.canvas_status = ttk.Label(canvas_frame, text="Not selected", foreground="red")
         self.canvas_status.pack(side='left', padx=(10, 0))
-        
         ttk.Button(canvas_frame, text="Select Canvas", 
-                  command=self.select_canvas_region).pack(side='right')
+                  command=self._select_canvas_region).pack(side='right')
         
         # Palette region
         palette_frame = ttk.Frame(region_frame)
         palette_frame.pack(fill='x', pady=5)
-        
         ttk.Label(palette_frame, text="Palette Region:").pack(side='left')
         self.palette_status = ttk.Label(palette_frame, text="Not selected", foreground="red")
         self.palette_status.pack(side='left', padx=(10, 0))
-        
         ttk.Button(palette_frame, text="Select Palette", 
-                  command=self.select_palette_region).pack(side='right')
+                  command=self._select_palette_region).pack(side='right')
         
-        # Analysis Frame
+        # Analysis
         analysis_frame = ttk.LabelFrame(self.setup_tab, text="Analysis", padding=10)
         analysis_frame.pack(fill='x', padx=10, pady=5)
         
         self.analyze_btn = ttk.Button(analysis_frame, text="Analyze Canvas & Palette", 
-                                     command=self.analyze_regions, state='disabled')
+                                     command=self._analyze_regions, state='disabled')
         self.analyze_btn.pack(pady=5)
-        
         self.analysis_status = ttk.Label(analysis_frame, text="Select regions first")
         self.analysis_status.pack(pady=5)
         
-        # Settings Frame
+        # Settings
+        self._create_settings_frame()
+    
+    def _create_settings_frame(self):
+        """Create settings frame in setup tab"""
         settings_frame = ttk.LabelFrame(self.setup_tab, text="Settings", padding=10)
         settings_frame.pack(fill='x', padx=10, pady=5)
         
@@ -349,13 +342,10 @@ class PlaceBotGUI:
         ttk.Label(tolerance_frame, text="Color Tolerance:").pack(side='left')
         self.tolerance_var = tk.IntVar(value=saved_tolerance)
         tolerance_scale = ttk.Scale(tolerance_frame, from_=1, to=20, variable=self.tolerance_var, 
-                                   orient='horizontal')
+                                   orient='horizontal', command=self._update_tolerance_label)
         tolerance_scale.pack(side='right', fill='x', expand=True, padx=(10, 0))
-        
-        # Tolerance value display
         self.tolerance_label = ttk.Label(tolerance_frame, text=str(saved_tolerance))
         self.tolerance_label.pack(side='right', padx=(5, 10))
-        tolerance_scale.configure(command=self.update_tolerance_label)
         
         # Click delay setting
         delay_frame = ttk.Frame(settings_frame)
@@ -363,251 +353,111 @@ class PlaceBotGUI:
         ttk.Label(delay_frame, text="Click Delay (ms):").pack(side='left')
         self.delay_var = tk.IntVar(value=saved_delay)
         delay_scale = ttk.Scale(delay_frame, from_=10, to=100, variable=self.delay_var, 
-                               orient='horizontal')
+                               orient='horizontal', command=self._update_delay_label)
         delay_scale.pack(side='right', fill='x', expand=True, padx=(10, 0))
-        
-        # Delay value display
         self.delay_label = ttk.Label(delay_frame, text=str(saved_delay))
         self.delay_label.pack(side='right', padx=(5, 10))
-        delay_scale.configure(command=self.update_delay_label)
     
-    def update_tolerance_label(self, value):
-        """Update tolerance value display and save"""
-        self.tolerance_label.config(text=f"{int(float(value))}")
-        self.save_user_settings()
-
-    def update_delay_label(self, value):
-        """Update delay value display and save"""
-        self.delay_label.config(text=f"{int(float(value))}")
-        self.save_user_settings()
-    
-    def create_colors_tab(self):
+    def _create_colors_tab(self):
         """Color control tab for enabling/disabling colors"""
-        # Create scrollable frame for colors
+        # Create scrollable frame
         canvas = tk.Canvas(self.colors_tab)
         scrollbar = ttk.Scrollbar(self.colors_tab, orient="vertical", command=canvas.yview)
         scrollable_frame = ttk.Frame(canvas)
         
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
-        
+        scrollable_frame.bind("<Configure>", 
+                            lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
         
-        # ADD MOUSE WHEEL SCROLLING SUPPORT:
+        # Mouse wheel scrolling
         def on_mousewheel(event):
             canvas.yview_scroll(int(-1*(event.delta/120)), "units")
         
-        # Bind mouse wheel to canvas and scrollable frame
-        canvas.bind("<MouseWheel>", on_mousewheel)
-        scrollable_frame.bind("<MouseWheel>", on_mousewheel)
-        
-        # Also bind to the main colors_tab for when mouse is over empty areas
-        self.colors_tab.bind("<MouseWheel>", on_mousewheel)
-        
-        # Make sure canvas gets focus when mouse enters
         def on_enter(event):
             canvas.focus_set()
+        
+        # Bind mouse wheel events
+        for widget in [canvas, scrollable_frame, self.colors_tab]:
+            widget.bind("<MouseWheel>", on_mousewheel)
         canvas.bind("<Enter>", on_enter)
         
         # Control buttons
         control_frame = ttk.Frame(self.colors_tab)
         control_frame.pack(fill='x', padx=10, pady=5)
         
-        ttk.Button(control_frame, text="Enable All", 
-                  command=self.enable_all_colors).pack(side='left', padx=5)
-        ttk.Button(control_frame, text="Disable All", 
-                  command=self.disable_all_colors).pack(side='left', padx=5)
-        ttk.Button(control_frame, text="Free Colors", 
-                  command=self.enable_only_free).pack(side='left', padx=5)
-        ttk.Button(control_frame, text="Available Colors", 
-                  command=self.enable_available_colors).pack(side='left', padx=5)
+        buttons = [
+            ("Enable All", self._enable_all_colors),
+            ("Disable All", self._disable_all_colors),
+            ("Free Colors", self._enable_only_free),
+            ("Available Colors", self._enable_available_colors)
+        ]
+        
+        for text, command in buttons:
+            ttk.Button(control_frame, text=text, command=command).pack(side='left', padx=5)
         
         # Create color checkboxes
-        self.color_vars = {}
-        self.bought_vars = {}
+        self._create_color_widgets(scrollable_frame, on_mousewheel)
         
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+    
+    def _create_color_widgets(self, parent, mousewheel_handler):
+        """Create color control widgets"""
         for color in self.color_palette:
-            color_frame = ttk.Frame(scrollable_frame)
+            color_frame = ttk.Frame(parent)
             color_frame.pack(fill='x', padx=10, pady=2)
-            
-            # BIND MOUSE WHEEL TO EACH COLOR FRAME TOO:
-            color_frame.bind("<MouseWheel>", on_mousewheel)
+            color_frame.bind("<MouseWheel>", mousewheel_handler)
             
             # Color preview
             color_canvas = tk.Canvas(color_frame, width=30, height=20)
             color_canvas.pack(side='left', padx=5)
-            color_canvas.bind("<MouseWheel>", on_mousewheel)  # ADD THIS
+            color_canvas.bind("<MouseWheel>", mousewheel_handler)
             
             rgb = color['rgb']
             hex_color = f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
             color_canvas.create_rectangle(0, 0, 30, 20, fill=hex_color, outline="")
             
-            # Load saved state using ONLY user_settings.json
+            # Load saved state
             color_id = str(color['id'])
             color_settings = self.user_settings['colors'].get(color_id, {})
-            
-            # Get bought status ONLY from user_settings.json
             is_bought = color_settings.get('bought', False) if color.get('premium', False) else True
-            
-            # Get enabled status
             default_enabled = not color.get('premium', False) or is_bought
             is_enabled = color_settings.get('enabled', default_enabled)
             
             # Enable/disable checkbox
             var = tk.BooleanVar(value=is_enabled)
             self.color_vars[color['name']] = var
-            
             checkbox = ttk.Checkbutton(color_frame, variable=var, command=self.save_user_settings)
             checkbox.pack(side='left', padx=5)
-            checkbox.bind("<MouseWheel>", on_mousewheel)  # ADD THIS
+            checkbox.bind("<MouseWheel>", mousewheel_handler)
             
             # Color name label
-            label_text = color['name']
-            if color.get('premium', False):
-                if is_bought:
-                    label_text += " (Premium)"
-                    label_color = "green"
-                else:
-                    label_text += " (Premium)"
-                    label_color = "red"
-            else:
-                label_text += " (Free)"
-                label_color = "blue"
+            label_text = f"{color['name']} ({'Premium' if color.get('premium', False) else 'Free'})"
+            label_color = "green" if (not color.get('premium', False) or is_bought) else "red"
             
             name_label = ttk.Label(color_frame, text=label_text, foreground=label_color)
             name_label.pack(side='left', padx=5)
-            name_label.bind("<MouseWheel>", on_mousewheel)  # ADD THIS
+            name_label.bind("<MouseWheel>", mousewheel_handler)
             
-            # Store reference to the label for later updates
-            setattr(name_label, 'color_id', color['id'])
-            setattr(name_label, 'color_name', color['name'])
+            # Store label reference for updates
+            self.color_labels[color['name']] = name_label
             
-            # For premium colors, add bought toggle checkbox
+            # Bought toggle for premium colors
             if color.get('premium', False):
                 bought_var = tk.BooleanVar(value=is_bought)
                 self.bought_vars[color['name']] = bought_var
                 
                 bought_checkbox = ttk.Checkbutton(
-                    color_frame, 
-                    text="Bought", 
-                    variable=bought_var,
-                    command=lambda c=color: self.toggle_bought_status(c)
+                    color_frame, text="Bought", variable=bought_var,
+                    command=lambda c=color: self._toggle_bought_status(c)
                 )
                 bought_checkbox.pack(side='left', padx=10)
-                bought_checkbox.bind("<MouseWheel>", on_mousewheel)
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-
-    def toggle_bought_status(self, color):
-        """Toggle bought status and save ONLY to user_settings.json"""
-        try:
-            color_name = color['name']
-            color_id = str(color['id'])
-            new_bought_status = self.bought_vars[color_name].get()
-            
-            # Update ONLY user_settings.json
-            if color_id not in self.user_settings['colors']:
-                self.user_settings['colors'][color_id] = {}
-            self.user_settings['colors'][color_id]['bought'] = new_bought_status
-            
-            # Save user settings
-            self.save_user_settings()
-            
-            # Update the label color immediately without refreshing the whole panel
-            self.update_color_label(color, new_bought_status)
-            
-            # DON'T refresh the whole tab - this causes freezing and scroll reset
-            # self.refresh_colors_tab()  # REMOVE THIS LINE
-            
-        except Exception as e:
-            print(f"Failed to toggle bought status: {e}")
-
-    def update_color_label(self, color, is_bought):
-        """Update just the specific color label using exact color name matching"""
-        color_name = color['name']
-        
-        # Find the canvas widget in colors_tab
-        canvas_widget = None
-        for widget in self.colors_tab.winfo_children():
-            if isinstance(widget, tk.Canvas):
-                canvas_widget = widget
-                break
-        
-        if not canvas_widget:
-            return
-        
-        # Find the scrollable frame inside the canvas
-        scrollable_frame = None
-        for child in canvas_widget.winfo_children():
-            if isinstance(child, ttk.Frame):
-                scrollable_frame = child
-                break
-        
-        if not scrollable_frame:
-            return
-        
-        # Search through color frames to find the matching one
-        for color_frame in scrollable_frame.winfo_children():
-            if isinstance(color_frame, ttk.Frame):
-                # Find the label widget in this color frame
-                label_widget = None
-                for widget in color_frame.winfo_children():
-                    if isinstance(widget, ttk.Label):
-                        # Check if this label contains our EXACT color name
-                        label_text = widget.cget('text')
-                        # Use exact matching instead of startswith
-                        if (label_text.startswith(color_name + " (Premium)") or 
-                            label_text.startswith(color_name + " (Free)")):
-                            label_widget = widget
-                            break
-                
-                if label_widget:
-                    # Update this specific label
-                    if color.get('premium', False):
-                        if is_bought:
-                            label_widget.config(text=f"{color_name} (Premium)", foreground="green")
-                        else:
-                            label_widget.config(text=f"{color_name} (Premium)", foreground="red")
-                    return
+                bought_checkbox.bind("<MouseWheel>", mousewheel_handler)
     
-    def enable_available_colors(self):
-        """Enable all available colors (free + bought premium colors)"""
-        for color in self.color_palette:
-            color_id = str(color['id'])
-            color_settings = self.user_settings['colors'].get(color_id, {})
-            
-            # Get bought status ONLY from user_settings
-            is_bought = color_settings.get('bought', False) if color.get('premium', False) else True
-            is_available = not color.get('premium', False) or is_bought
-            
-            if color['name'] in self.color_vars:
-                self.color_vars[color['name']].set(is_available)
-        self.save_user_settings()
-
-    def enable_only_free(self):
-        """Enable only free colors"""
-        for color in self.color_palette:
-            is_free = not color.get('premium', False)
-            if color['name'] in self.color_vars:
-                self.color_vars[color['name']].set(is_free)
-        self.save_user_settings()
-
-    def enable_all_colors(self):
-        for var in self.color_vars.values():
-            var.set(True)
-        self.save_user_settings()
-
-    def disable_all_colors(self):
-        for var in self.color_vars.values():
-            var.set(False)
-        self.save_user_settings()
-
-    def create_preview_tab(self):
+    def _create_preview_tab(self):
         """Preview tab for showing debug images and analysis results"""
-        # Image display frame
+        # Image display
         image_frame = ttk.LabelFrame(self.preview_tab, text="Debug Images", padding=10)
         image_frame.pack(fill='both', expand=True, padx=10, pady=5)
         
@@ -620,16 +470,15 @@ class PlaceBotGUI:
                                   values=["Size Estimation", "Palette Detection"],
                                   state="readonly")
         image_combo.pack(side='left', padx=5)
-        image_combo.bind('<<ComboboxSelected>>', self.load_debug_image)
+        image_combo.bind('<<ComboboxSelected>>', self._load_debug_image)
         
         ttk.Button(img_select_frame, text="Refresh", 
-                  command=self.refresh_debug_images).pack(side='left', padx=5)
+                  command=self._refresh_debug_images).pack(side='left', padx=5)
         
-        # Image display
         self.image_label = ttk.Label(image_frame, text="No image selected")
         self.image_label.pack(expand=True)
         
-        # Statistics frame
+        # Statistics
         stats_frame = ttk.LabelFrame(self.preview_tab, text="Analysis Results", padding=10)
         stats_frame.pack(fill='x', padx=10, pady=5)
         
@@ -640,19 +489,17 @@ class PlaceBotGUI:
         self.stats_text.pack(side='left', fill='both', expand=True)
         stats_scrollbar.pack(side='right', fill='y')
     
-    def create_control_tab(self):
+    def _create_control_tab(self):
         """Control tab for running the bot"""
-        # Status frame
+        # Status
         status_frame = ttk.LabelFrame(self.control_tab, text="Status", padding=10)
         status_frame.pack(fill='x', padx=10, pady=5)
         
         self.status_label = ttk.Label(status_frame, text="Ready", font=('Arial', 12, 'bold'))
         self.status_label.pack(pady=5)
         
-        # Progress bar
         self.progress_var = tk.DoubleVar()
-        self.progress_bar = ttk.Progressbar(status_frame, variable=self.progress_var, 
-                                           maximum=100)
+        self.progress_bar = ttk.Progressbar(status_frame, variable=self.progress_var, maximum=100)
         self.progress_bar.pack(fill='x', pady=5)
         
         # Control buttons
@@ -660,47 +507,17 @@ class PlaceBotGUI:
         button_frame.pack(pady=10)
         
         self.start_btn = ttk.Button(button_frame, text="Start Painting", 
-                                   command=self.start_bot, state='disabled')
+                                   command=self._start_bot, state='disabled')
         self.start_btn.pack(side='left', padx=5)
         
         self.stop_btn = ttk.Button(button_frame, text="Stop", 
-                                  command=self.stop_bot, state='disabled')
+                                  command=self._stop_bot, state='disabled')
         self.stop_btn.pack(side='left', padx=5)
         
-        # Bot Settings Frame
-        bot_settings_frame = ttk.LabelFrame(self.control_tab, text="Bot Settings", padding=10)
-        bot_settings_frame.pack(fill='x', padx=10, pady=5)
+        # Bot Settings
+        self._create_bot_settings()
         
-        # Pixel limit setting
-        limit_frame = ttk.Frame(bot_settings_frame)
-        limit_frame.pack(fill='x', pady=5)
-        
-        ttk.Label(limit_frame, text="Pixel Limit (stop after painting):").pack(side='left')
-        
-        # Load saved pixel limit
-        saved_pixel_limit = self.user_settings['preferences'].get('pixel_limit', 50)
-        
-        # Pixel limit input field
-        self.pixel_limit_var = tk.IntVar(value=saved_pixel_limit)
-        self.pixel_limit_entry = ttk.Entry(limit_frame, textvariable=self.pixel_limit_var, width=8)
-        self.pixel_limit_entry.pack(side='right', padx=(5, 0))
-        self.pixel_limit_entry.bind('<KeyRelease>', self.on_pixel_limit_entry_change)
-        self.pixel_limit_entry.bind('<FocusOut>', self.on_pixel_limit_entry_change)
-        
-        ttk.Label(limit_frame, text="pixels").pack(side='right', padx=(5, 5))
-        
-        # Pixel limit slider
-        slider_frame = ttk.Frame(bot_settings_frame)
-        slider_frame.pack(fill='x', pady=2)
-        
-        ttk.Label(slider_frame, text="Quick Select:").pack(side='left')
-        self.pixel_limit_scale = ttk.Scale(slider_frame, from_=1, to=1000, 
-                                          variable=self.pixel_limit_var, 
-                                          orient='horizontal')
-        self.pixel_limit_scale.pack(side='right', fill='x', expand=True, padx=(10, 0))
-        self.pixel_limit_scale.configure(command=self.update_pixel_limit_from_slider)
-
-        # Log frame
+        # Log
         log_frame = ttk.LabelFrame(self.control_tab, text="Log", padding=10)
         log_frame.pack(fill='both', expand=True, padx=10, pady=5)
         
@@ -711,90 +528,175 @@ class PlaceBotGUI:
         self.log_text.pack(side='left', fill='both', expand=True)
         log_scrollbar.pack(side='right', fill='y')
     
-    def update_pixel_limit_from_slider(self, value):
-        """Update pixel limit when slider changes"""
-        # Update the entry field to match slider
-        new_value = int(float(value))
-        self.pixel_limit_var.set(new_value)
+    def _create_bot_settings(self):
+        """Create bot settings frame"""
+        bot_settings_frame = ttk.LabelFrame(self.control_tab, text="Bot Settings", padding=10)
+        bot_settings_frame.pack(fill='x', padx=10, pady=5)
         
-        # Save to user settings
+        # Pixel limit setting
+        limit_frame = ttk.Frame(bot_settings_frame)
+        limit_frame.pack(fill='x', pady=5)
+        
+        ttk.Label(limit_frame, text="Pixel Limit (stop after painting):").pack(side='left')
+        
+        saved_pixel_limit = self.user_settings['preferences'].get('pixel_limit', 50)
+        self.pixel_limit_var = tk.IntVar(value=saved_pixel_limit)
+        
+        self.pixel_limit_entry = ttk.Entry(limit_frame, textvariable=self.pixel_limit_var, width=8)
+        self.pixel_limit_entry.pack(side='right', padx=(5, 0))
+        self.pixel_limit_entry.bind('<KeyRelease>', self._on_pixel_limit_entry_change)
+        self.pixel_limit_entry.bind('<FocusOut>', self._on_pixel_limit_entry_change)
+        
+        ttk.Label(limit_frame, text="pixels").pack(side='right', padx=(5, 5))
+        
+        # Pixel limit slider
+        slider_frame = ttk.Frame(bot_settings_frame)
+        slider_frame.pack(fill='x', pady=2)
+        
+        ttk.Label(slider_frame, text="Quick Select:").pack(side='left')
+        self.pixel_limit_scale = ttk.Scale(slider_frame, from_=1, to=1000, 
+                                          variable=self.pixel_limit_var, orient='horizontal',
+                                          command=self._update_pixel_limit_from_slider)
+        self.pixel_limit_scale.pack(side='right', fill='x', expand=True, padx=(10, 0))
+
+    # ==================== EVENT HANDLERS ====================
+    
+    def _update_tolerance_label(self, value):
+        """Update tolerance value display and save"""
+        self.tolerance_label.config(text=f"{int(float(value))}")
         self.save_user_settings()
 
-    def on_pixel_limit_entry_change(self, event=None):
+    def _update_delay_label(self, value):
+        """Update delay value display and save"""
+        self.delay_label.config(text=f"{int(float(value))}")
+        self.save_user_settings()
+    
+    def _update_pixel_limit_from_slider(self, value):
+        """Update pixel limit when slider changes"""
+        new_value = int(float(value))
+        self.pixel_limit_var.set(new_value)
+        self.save_user_settings()
+
+    def _on_pixel_limit_entry_change(self, event=None):
         """Handle manual entry changes for pixel limit"""
         try:
-            # Get value from entry
             new_value = self.pixel_limit_var.get()
-            
-            # Validate range
-            if new_value < 1:
-                new_value = 1
-                self.pixel_limit_var.set(new_value)
-            elif new_value > 1000:
-                new_value = 1000
-                self.pixel_limit_var.set(new_value)
-        
-            # Update slider to match entry
+            new_value = max(1, min(1000, new_value))  # Clamp to valid range
+            self.pixel_limit_var.set(new_value)
             self.pixel_limit_scale.set(new_value)
-            
-            # Save to user settings
             self.save_user_settings()
-        
         except tk.TclError:
-            # Handle invalid input (non-numeric)
-            pass
+            pass  # Invalid input, ignore
+
+    def _toggle_bought_status(self, color):
+        """Toggle bought status and save to user_settings.json"""
+        try:
+            color_name = color['name']
+            color_id = str(color['id'])
+            new_bought_status = self.bought_vars[color_name].get()
+            
+            # Update user_settings.json
+            if color_id not in self.user_settings['colors']:
+                self.user_settings['colors'][color_id] = {}
+            self.user_settings['colors'][color_id]['bought'] = new_bought_status
+            
+            self.save_user_settings()
+            self._update_color_label(color, new_bought_status)
+            
+        except Exception as e:
+            print(f"Failed to toggle bought status: {e}")
+
+    def _update_color_label(self, color, is_bought):
+        """Update specific color label using stored reference"""
+        color_name = color['name']
+        
+        if color_name in self.color_labels:
+            label_widget = self.color_labels[color_name]
+            label_text = f"{color_name} ({'Premium' if color.get('premium', False) else 'Free'})"
+            label_color = "green" if (not color.get('premium', False) or is_bought) else "red"
+            label_widget.config(text=label_text, foreground=label_color)
+
+    # ==================== COLOR MANAGEMENT ====================
     
-    def select_canvas_region(self):
-        """Start canvas region selection with drag functionality"""
-        self.root.withdraw()  # Hide main window
-        RegionSelector(self.on_canvas_region_selected)
+    def _enable_all_colors(self):
+        """Enable all colors"""
+        for var in self.color_vars.values():
+            var.set(True)
+        self.save_user_settings()
+
+    def _disable_all_colors(self):
+        """Disable all colors"""
+        for var in self.color_vars.values():
+            var.set(False)
+        self.save_user_settings()
+
+    def _enable_only_free(self):
+        """Enable only free colors"""
+        for color in self.color_palette:
+            is_free = not color.get('premium', False)
+            if color['name'] in self.color_vars:
+                self.color_vars[color['name']].set(is_free)
+        self.save_user_settings()
+
+    def _enable_available_colors(self):
+        """Enable all available colors (free + bought premium colors)"""
+        for color in self.color_palette:
+            color_id = str(color['id'])
+            color_settings = self.user_settings['colors'].get(color_id, {})
+            is_bought = color_settings.get('bought', False) if color.get('premium', False) else True
+            is_available = not color.get('premium', False) or is_bought
+            
+            if color['name'] in self.color_vars:
+                self.color_vars[color['name']].set(is_available)
+        self.save_user_settings()
+
+    # ==================== REGION SELECTION ====================
     
-    def select_palette_region(self):
-        """Start palette region selection with drag functionality"""
-        self.root.withdraw()  # Hide main window
-        RegionSelector(self.on_palette_region_selected)
+    def _select_canvas_region(self):
+        """Start canvas region selection"""
+        self.root.withdraw()
+        RegionSelector(self._on_canvas_region_selected)
     
-    def on_canvas_region_selected(self, region):
-        """Callback when canvas region is selected"""
-        self.root.deiconify()  # Show main window
+    def _select_palette_region(self):
+        """Start palette region selection"""
+        self.root.withdraw()
+        RegionSelector(self._on_palette_region_selected)
+    
+    def _on_canvas_region_selected(self, region):
+        """Handle canvas region selection"""
+        self.root.deiconify()
         if region:
             self.canvas_region = region
             self.canvas_status.config(text=f"Selected: {region}", foreground="green")
-            self.save_user_settings()  # Save the new region
+            self.save_user_settings()
         else:
-            self.log_message("Canvas region selection cancelled")
-        self.check_ready_for_analysis()
+            self._log_message("Canvas region selection cancelled")
+        self._check_ready_for_analysis()
     
-    def on_palette_region_selected(self, region):
-        """Callback when palette region is selected"""
-        self.root.deiconify()  # Show main window
+    def _on_palette_region_selected(self, region):
+        """Handle palette region selection"""
+        self.root.deiconify()
         if region:
             self.palette_region = region
             self.palette_status.config(text=f"Selected: {region}", foreground="green")
-            self.save_user_settings()  # Save the new region
+            self.save_user_settings()
         else:
-            self.log_message("Palette region selection cancelled")
-        self.check_ready_for_analysis()
+            self._log_message("Palette region selection cancelled")
+        self._check_ready_for_analysis()
     
-    def log_message(self, message):
-        """Add message to log"""
-        self.log_text.config(state='normal')
-        self.log_text.insert(tk.END, f"{message}\n")
-        self.log_text.see(tk.END)
-        self.log_text.config(state='disabled')
-    
-    def check_ready_for_analysis(self):
+    def _check_ready_for_analysis(self):
         """Enable analysis button if both regions are selected"""
         if self.canvas_region and self.palette_region:
             self.analyze_btn.config(state='normal')
+
+    # ==================== ANALYSIS AND BOT ====================
     
-    def analyze_regions(self):
+    def _analyze_regions(self):
         """Run analysis in a separate thread"""
         self.analyze_btn.config(state='disabled', text="Analyzing...")
         self.analysis_status.config(text="Running analysis...")
-        self.log_message("Starting analysis...")
+        self._log_message("Starting analysis...")
         
-        # Run in thread to avoid freezing UI
         thread = threading.Thread(target=self._analyze_worker)
         thread.daemon = True
         thread.start()
@@ -802,7 +704,6 @@ class PlaceBotGUI:
     def _analyze_worker(self):
         """Worker function for analysis (runs in separate thread)"""
         try:
-            # Import your existing functions here
             from main import (get_screen, estimate_pixel_size, get_preview_positions_from_estimation,
                             build_pixel_map, detect_palette_colors, save_palette_debug_image)
             
@@ -815,13 +716,11 @@ class PlaceBotGUI:
             self.pixel_size = estimate_pixel_size(canvas_img_bgr)
             preview_positions = get_preview_positions_from_estimation(canvas_img_bgr, self.pixel_size)
             self.pixel_map = build_pixel_map(canvas_img_bgr, self.pixel_size, preview_positions)
-            
             self.color_position_map = detect_palette_colors(
                 palette_img_rgb, self.palette_region, self.color_palette
             )
             save_palette_debug_image(palette_img_rgb, self.color_position_map, self.palette_region)
             
-            # Send results back to main thread
             self.message_queue.put({
                 'type': 'analysis_complete',
                 'pixel_size': self.pixel_size,
@@ -830,12 +729,9 @@ class PlaceBotGUI:
             })
             
         except Exception as e:
-            self.message_queue.put({
-                'type': 'analysis_error',
-                'error': str(e)
-            })
+            self.message_queue.put({'type': 'analysis_error', 'error': str(e)})
     
-    def start_bot(self):
+    def _start_bot(self):
         """Start the painting bot"""
         if not self.pixel_map or not self.color_position_map:
             messagebox.showerror("Error", "Please run analysis first!")
@@ -845,9 +741,8 @@ class PlaceBotGUI:
         self.start_btn.config(state='disabled')
         self.stop_btn.config(state='normal')
         self.status_label.config(text="Painting...")
-        self.log_message("Starting painting bot...")
+        self._log_message("Starting painting bot...")
         
-        # Start bot in separate thread
         self.bot_thread = threading.Thread(target=self._bot_worker)
         self.bot_thread.daemon = True
         self.bot_thread.start()
@@ -857,100 +752,22 @@ class PlaceBotGUI:
         try:
             from main import find_pixels_to_paint_from_map
             import pyautogui
-            import time
             
-            # Get enabled colors using new format
-            enabled_colors = []
-            for color in self.color_palette:
-                color_id = str(color['id'])
-                color_settings = self.user_settings['colors'].get(color_id, {})
-                
-                # Check if enabled
-                is_enabled = color_settings.get('enabled', True)
-                if is_enabled and color['name'] in self.color_vars and self.color_vars[color['name']].get():
-                    enabled_colors.append(color)
-            
-            total_colors = len(enabled_colors)
-            total_pixels_painted = 0  # Track total pixels painted
-            pixel_limit = self.pixel_limit_var.get()  # Get pixel limit
+            # Get enabled colors
+            enabled_colors = self._get_enabled_colors()
+            total_pixels_painted = 0
+            pixel_limit = self.pixel_limit_var.get()
             
             self.message_queue.put({
                 'type': 'log',
                 'message': f"Starting bot with pixel limit: {pixel_limit}"
             })
-            for i, color in enumerate(enabled_colors):
-                if not self.is_running:
+            
+            for color in enabled_colors:
+                if not self.is_running or total_pixels_painted >= pixel_limit:
                     break
                 
-                # Check if we've reached the pixel limit
-                if total_pixels_painted >= pixel_limit:
-                    self.message_queue.put({
-                        'type': 'log',
-                        'message': f"Pixel limit reached! Painted {total_pixels_painted} pixels."
-                    })
-                    break
-                
-                target_rgb = tuple(color["rgb"])
-                if target_rgb not in self.color_position_map:
-                    continue
-                
-                # Find pixels to paint
-                target_bgr = target_rgb[::-1]
-                positions = find_pixels_to_paint_from_map(self.pixel_map, target_bgr, 
-                                                        tolerance=self.tolerance_var.get())
-                
-                if positions:
-                    # Limit positions to not exceed pixel limit
-                    remaining_pixels = pixel_limit - total_pixels_painted
-                    if len(positions) > remaining_pixels:
-                        positions = positions[:remaining_pixels]
-                
-                    self.message_queue.put({
-                        'type': 'log',
-                        'message': f"Painting {len(positions)} pixels with {color['name']} (Total: {total_pixels_painted + len(positions)}/{pixel_limit})"
-                    })
-                  
-                    # Click color in palette
-                    px, py = self.color_position_map[target_rgb]
-                    pyautogui.click(px, py)
-                    time.sleep(0.2)
-                    
-                    # Paint positions
-                    for pos_i, (x, y) in enumerate(positions):
-                        if not self.is_running:
-                            break
-                        
-                        pyautogui.click(
-                            x + self.canvas_region[0], 
-                            y + self.canvas_region[1]
-                        )
-                        time.sleep(self.delay_var.get() / 1000.0)
-                        total_pixels_painted += 1
-                        
-                        # Update progress every 10 pixels or on last pixel
-                        if pos_i % 10 == 0 or pos_i == len(positions) - 1:
-                            progress = (total_pixels_painted / pixel_limit) * 100
-                            self.message_queue.put({
-                                'type': 'progress',
-                                'progress': min(progress, 100),  # Cap at 100%
-                                'status': f"Painting {color['name']} ({total_pixels_painted}/{pixel_limit} pixels)"
-                            })
-                    
-                        # Check if we've reached the limit
-                        if total_pixels_painted >= pixel_limit:
-                            break
-                
-                # Update progress for completed color
-                progress = ((i + 1) / total_colors) * 100
-                self.message_queue.put({
-                    'type': 'progress',
-                    'progress': progress,
-                    'status': f"Completed {color['name']}"
-                })
-                
-                # Check again if we've reached the limit
-                if total_pixels_painted >= pixel_limit:
-                    break
+                total_pixels_painted = self._paint_color(color, total_pixels_painted, pixel_limit)
             
             self.message_queue.put({
                 'type': 'bot_complete',
@@ -959,98 +776,95 @@ class PlaceBotGUI:
             })
             
         except Exception as e:
-            self.message_queue.put({
-                'type': 'bot_error',
-                'error': str(e)
-            })
+            self.message_queue.put({'type': 'bot_error', 'error': str(e)})
     
-    def stop_bot(self):
+    def _get_enabled_colors(self):
+        """Get list of enabled colors"""
+        enabled_colors = []
+        for color in self.color_palette:
+            color_id = str(color['id'])
+            color_settings = self.user_settings['colors'].get(color_id, {})
+            is_enabled = color_settings.get('enabled', True)
+            
+            if is_enabled and color['name'] in self.color_vars and self.color_vars[color['name']].get():
+                enabled_colors.append(color)
+        return enabled_colors
+    
+    def _paint_color(self, color, total_pixels_painted, pixel_limit):
+        """Paint a specific color and return updated pixel count"""
+        from main import find_pixels_to_paint_from_map
+        import pyautogui
+        
+        target_rgb = tuple(color["rgb"])
+        if target_rgb not in self.color_position_map:
+            return total_pixels_painted
+        
+        # Find pixels to paint
+        target_bgr = target_rgb[::-1]
+        positions = find_pixels_to_paint_from_map(
+            self.pixel_map, target_bgr, tolerance=self.tolerance_var.get()
+        )
+        
+        if not positions:
+            return total_pixels_painted
+        
+        # Limit positions to not exceed pixel limit
+        remaining_pixels = pixel_limit - total_pixels_painted
+        if len(positions) > remaining_pixels:
+            positions = positions[:remaining_pixels]
+        
+        self.message_queue.put({
+            'type': 'log',
+            'message': f"Painting {len(positions)} pixels with {color['name']} "
+                      f"(Total: {total_pixels_painted + len(positions)}/{pixel_limit})"
+        })
+        
+        # Click color in palette
+        px, py = self.color_position_map[target_rgb]
+        pyautogui.click(px, py)
+        time.sleep(0.2)
+        
+        # Paint positions
+        for pos_i, (x, y) in enumerate(positions):
+            if not self.is_running:
+                break
+            
+            pyautogui.click(x + self.canvas_region[0], y + self.canvas_region[1])
+            time.sleep(self.delay_var.get() / 1000.0)
+            total_pixels_painted += 1
+            
+            # Update progress every 10 pixels
+            if pos_i % 10 == 0 or pos_i == len(positions) - 1:
+                progress = (total_pixels_painted / pixel_limit) * 100
+                self.message_queue.put({
+                    'type': 'progress',
+                    'progress': min(progress, 100),
+                    'status': f"Painting {color['name']} ({total_pixels_painted}/{pixel_limit} pixels)"
+                })
+            
+            if total_pixels_painted >= pixel_limit:
+                break
+        
+        return total_pixels_painted
+    
+    def _stop_bot(self):
         """Stop the painting bot"""
         self.is_running = False
         self.status_label.config(text="Stopping...")
-        self.log_message("Stopping bot...")
+        self._log_message("Stopping bot...")
+
+    # ==================== UI HELPERS ====================
     
-    def process_queue(self):
-        """Process messages from worker threads"""
-        try:
-            while True:
-                message = self.message_queue.get_nowait()
-                
-                # ADD THIS MISSING HANDLER:
-                if message['type'] == 'log':
-                    self.log_message(message['message'])
-                
-                elif message['type'] == 'analysis_complete':
-                    self.analyze_btn.config(state='normal', text="Analyze Canvas & Palette")
-                    self.analysis_status.config(text=f"Analysis complete! "
-                                                  f"Pixel size: {message['pixel_size']}, "
-                                                  f"Pixels: {message['pixel_count']}, "
-                                                  f"Colors: {message['colors_found']}")
-                    self.start_btn.config(state='normal')
-                    self.update_stats()
-                    self.log_message(f"Analysis completed successfully. Found {message['pixel_count']} pixels and {message['colors_found']} colors.")
-                    
-                elif message['type'] == 'analysis_error':
-                    self.analyze_btn.config(state='normal', text="Analyze Canvas & Palette")
-                    self.analysis_status.config(text=f"Analysis failed: {message['error']}")
-                    self.log_message(f"Analysis failed: {message['error']}")
-                    
-                elif message['type'] == 'progress':
-                    self.progress_var.set(message['progress'])
-                    self.status_label.config(text=message['status'])
-                    
-                elif message['type'] == 'bot_complete':
-                    self.is_running = False
-                    self.start_btn.config(state='normal')
-                    self.stop_btn.config(state='disabled')
-                    total_painted = message.get('total_painted', 0)
-                    limit_reached = message.get('limit_reached', False)
-                    
-                    if limit_reached:
-                        self.status_label.config(text=f"Pixel limit reached! ({total_painted} pixels)")
-                        self.log_message(f"Bot stopped - pixel limit reached! Total pixels painted: {total_painted}")
-                    else:
-                        self.status_label.config(text=f"Painting complete! ({total_painted} pixels)")
-                        self.log_message(f"Painting completed successfully! Total pixels painted: {total_painted}")
-                    
-                elif message['type'] == 'bot_error':
-                    self.is_running = False
-                    self.start_btn.config(state='normal')
-                    self.stop_btn.config(state='disabled')
-                    self.status_label.config(text=f"Error: {message['error']}")
-                    self.log_message(f"Bot error: {message['error']}")
-                
-        except queue.Empty:
-            pass
-        
-        # Schedule next check
-        self.root.after(100, self.process_queue)
+    def _log_message(self, message):
+        """Add message to log"""
+        self.log_text.config(state='normal')
+        self.log_text.insert(tk.END, f"{message}\n")
+        self.log_text.see(tk.END)
+        self.log_text.config(state='disabled')
     
-    def enable_all_colors(self):
-        for var in self.color_vars.values():
-            var.set(True)
-        self.save_user_settings()
-
-    def disable_all_colors(self):
-        for var in self.color_vars.values():
-            var.set(False)
-        self.save_user_settings()
-
-    def enable_only_free(self):
-        """Enable only free colors"""
-        for color in self.color_palette:
-            if color.get('ignore', False):
-                continue
-                
-            is_free = not color.get('premium', False)
-            if color['name'] in self.color_vars:
-                self.color_vars[color['name']].set(is_free)
-        self.save_user_settings()
-
-    def load_debug_image(self, event=None):
+    def _load_debug_image(self, event=None):
         """Load and display debug image"""
         image_type = self.image_var.get()
-        
         filename_map = {
             "Size Estimation": "debug_size_estimation.png",
             "Palette Detection": "debug_palette.png"
@@ -1059,23 +873,21 @@ class PlaceBotGUI:
         filename = filename_map.get(image_type)
         if filename and os.path.exists(filename):
             try:
-                # Load and resize image to fit in UI
                 img = Image.open(filename)
                 img.thumbnail((600, 400), Image.Resampling.LANCZOS)
-                
                 photo = ImageTk.PhotoImage(img)
                 self.image_label.config(image=photo, text="")
-                self.image_label.image = photo  # Keep a reference
+                self.image_label.image = photo
             except Exception as e:
                 self.image_label.config(text=f"Error loading image: {e}")
         else:
             self.image_label.config(text="Image not found. Run analysis first.")
     
-    def refresh_debug_images(self):
+    def _refresh_debug_images(self):
         """Refresh debug image list"""
-        self.load_debug_image()
+        self._load_debug_image()
     
-    def update_stats(self):
+    def _update_stats(self):
         """Update statistics display"""
         if not self.pixel_map or not self.color_position_map:
             return
@@ -1092,24 +904,76 @@ Total Colors: {len(self.color_vars)}
 Settings:
 Color Tolerance: {self.tolerance_var.get()}
 Click Delay: {self.delay_var.get()}ms
+Pixel Limit: {self.pixel_limit_var.get()}
 """
         
         self.stats_text.config(state='normal')
         self.stats_text.delete(1.0, tk.END)
         self.stats_text.insert(1.0, stats)
         self.stats_text.config(state='disabled')
+
+    # ==================== MESSAGE PROCESSING ====================
     
-    def refresh_colors_tab(self):
-        """Refresh the colors tab to show updated bought status"""
-        # Clear the current colors tab
-        for widget in self.colors_tab.winfo_children():
-            widget.destroy()
-    
-        # Recreate the colors tab
-        self.create_colors_tab()
+    def process_queue(self):
+        """Process messages from worker threads"""
+        try:
+            while True:
+                message = self.message_queue.get_nowait()
+                
+                if message['type'] == 'log':
+                    self._log_message(message['message'])
+                
+                elif message['type'] == 'analysis_complete':
+                    self.analyze_btn.config(state='normal', text="Analyze Canvas & Palette")
+                    self.analysis_status.config(
+                        text=f"Analysis complete! Pixel size: {message['pixel_size']}, "
+                             f"Pixels: {message['pixel_count']}, Colors: {message['colors_found']}"
+                    )
+                    self.start_btn.config(state='normal')
+                    self._update_stats()
+                    self._log_message(
+                        f"Analysis completed successfully. Found {message['pixel_count']} pixels "
+                        f"and {message['colors_found']} colors."
+                    )
+                    
+                elif message['type'] == 'analysis_error':
+                    self.analyze_btn.config(state='normal', text="Analyze Canvas & Palette")
+                    self.analysis_status.config(text=f"Analysis failed: {message['error']}")
+                    self._log_message(f"Analysis failed: {message['error']}")
+                    
+                elif message['type'] == 'progress':
+                    self.progress_var.set(message['progress'])
+                    self.status_label.config(text=message['status'])
+                    
+                elif message['type'] == 'bot_complete':
+                    self.is_running = False
+                    self.start_btn.config(state='normal')
+                    self.stop_btn.config(state='disabled')
+                    total_painted = message.get('total_painted', 0)
+                    limit_reached = message.get('limit_reached', False)
+                    
+                    if limit_reached:
+                        self.status_label.config(text=f"Pixel limit reached! ({total_painted} pixels)")
+                        self._log_message(f"Bot stopped - pixel limit reached! Total pixels painted: {total_painted}")
+                    else:
+                        self.status_label.config(text=f"Painting complete! ({total_painted} pixels)")
+                        self._log_message(f"Painting completed successfully! Total pixels painted: {total_painted}")
+                    
+                elif message['type'] == 'bot_error':
+                    self.is_running = False
+                    self.start_btn.config(state='normal')
+                    self.stop_btn.config(state='disabled')
+                    self.status_label.config(text=f"Error: {message['error']}")
+                    self._log_message(f"Bot error: {message['error']}")
+                
+        except queue.Empty:
+            pass
+        
+        self.root.after(100, self.process_queue)
 
 
 def main():
+    """Main entry point"""
     root = tk.Tk()
     app = PlaceBotGUI(root)
     root.mainloop()
