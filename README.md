@@ -148,7 +148,7 @@ wplace_bot/
 
 ## 📄 License
 
-Educational purposes only. Respect platform terms of service.
+This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
 
 ## ☕ Supporting This Project
 
