@@ -8,8 +8,10 @@ import queue
 import tkinter as tk
 import cv2
 
-# Import the new DataManager and RegionSelector
+# Add these imports at the top
 from core.data_manager import DataManager
+from core.analysis_worker import AnalysisWorker
+from core.bot_worker import BotWorker
 from gui.region_selector import RegionSelector
 
 class PlaceBotGUI:
@@ -20,12 +22,13 @@ class PlaceBotGUI:
         self.root.title("Place Bot - Pixel Art Automation")
         self.root.geometry("800x800")
         
-        # Initialize data manager
+        # Initialize core components
         self.data_manager = DataManager()
+        self.analysis_worker = AnalysisWorker(self.data_manager)
+        self.bot_worker = BotWorker(self.data_manager)
         
-        # State variables (now delegated to data_manager)
+        # State variables
         self.is_running = False
-        self.bot_thread = None
         
         # UI variables
         self.color_vars = {}
@@ -507,46 +510,12 @@ class PlaceBotGUI:
         self.analysis_status.config(text="Running analysis...")
         self._log_message("Starting analysis...")
         
-        thread = threading.Thread(target=self._analyze_worker)
-        thread.daemon = True
-        thread.start()
-    
-    def _analyze_worker(self):
-        """Worker function for analysis (runs in separate thread)"""
-        try:
-            from main import (get_screen, estimate_pixel_size, get_preview_positions_from_estimation,
-                            build_pixel_map, detect_palette_colors, save_palette_debug_image)
-            
-            # Take screenshots using data_manager regions
-            palette_img_rgb = get_screen(self.data_manager.palette_region)  # FIXED: Use data_manager
-            canvas_img_rgb = get_screen(self.data_manager.canvas_region)    # FIXED: Use data_manager
-            canvas_img_bgr = cv2.cvtColor(canvas_img_rgb, cv2.COLOR_RGB2BGR)
-            
-            # Analyze
-            pixel_size = estimate_pixel_size(canvas_img_bgr)
-            preview_positions = get_preview_positions_from_estimation(canvas_img_bgr, pixel_size)
-            pixel_map = build_pixel_map(canvas_img_bgr, pixel_size, preview_positions)
-            color_position_map = detect_palette_colors(
-                palette_img_rgb, self.data_manager.palette_region, self.data_manager.color_palette  # FIXED: Use data_manager
-            )
-            save_palette_debug_image(palette_img_rgb, color_position_map, self.data_manager.palette_region)  # FIXED: Use data_manager
-            
-            # Store results in data_manager
-            self.data_manager.set_analysis_results(pixel_size, pixel_map, color_position_map)  # FIXED: Use data_manager
-            
-            self.message_queue.put({
-                'type': 'analysis_complete',
-                'pixel_size': pixel_size,
-                'pixel_count': len(pixel_map),
-                'colors_found': len(color_position_map)
-            })
-            
-        except Exception as e:
-            self.message_queue.put({'type': 'analysis_error', 'error': str(e)})
-    
+        # Use the analysis worker instead of creating thread manually
+        self.analysis_worker.start_analysis(self.message_queue)
+
     def _start_bot(self):
         """Start the painting bot"""
-        if not self.data_manager.has_analysis_data():  # FIXED: Use data_manager
+        if not self.data_manager.has_analysis_data():
             messagebox.showerror("Error", "Please run analysis first!")
             return
         
@@ -556,116 +525,41 @@ class PlaceBotGUI:
         self.status_label.config(text="Painting...")
         self._log_message("Starting painting bot...")
         
-        self.bot_thread = threading.Thread(target=self._bot_worker)
-        self.bot_thread.daemon = True
-        self.bot_thread.start()
-    
-    def _bot_worker(self):
-        """Bot worker function (runs in separate thread)"""
-        try:
-            from main import find_pixels_to_paint_from_map
-            import pyautogui
-            
-            # Get enabled colors
-            enabled_colors = self._get_enabled_colors()
-            total_pixels_painted = 0
-            pixel_limit = self.pixel_limit_var.get()
-            
-            self.message_queue.put({
-                'type': 'log',
-                'message': f"Starting bot with pixel limit: {pixel_limit}"
-            })
-            
-            for color in enabled_colors:
-                if not self.is_running or total_pixels_painted >= pixel_limit:
-                    break
-                
-                total_pixels_painted = self._paint_color(color, total_pixels_painted, pixel_limit)
-            
-            self.message_queue.put({
-                'type': 'bot_complete',
-                'total_painted': total_pixels_painted,
-                'limit_reached': total_pixels_painted >= pixel_limit
-            })
-            
-        except Exception as e:
-            self.message_queue.put({'type': 'bot_error', 'error': str(e)})
-    
+        # Get enabled colors and settings
+        enabled_colors = self._get_enabled_colors()
+        settings = {
+            'pixel_limit': self.pixel_limit_var.get(),
+            'tolerance': self.tolerance_var.get(),
+            'delay': self.delay_var.get()
+        }
+        
+        # Use the bot worker instead of creating thread manually
+        self.bot_worker.start_bot(self.message_queue, enabled_colors, settings)
+
+    def _stop_bot(self):
+        """Stop the painting bot"""
+        self.is_running = False
+        self.bot_worker.stop_bot()
+        self.status_label.config(text="Stopping...")
+        self._log_message("Stopping bot...")
+
     def _get_enabled_colors(self):
         """Get list of enabled colors"""
         enabled_colors = []
-        for color in self.data_manager.color_palette:  # FIXED: Use data_manager
+        for color in self.data_manager.color_palette:
             color_id = str(color['id'])
-            color_settings = self.data_manager.user_settings['colors'].get(color_id, {})  # FIXED: Use data_manager
+            color_settings = self.data_manager.user_settings['colors'].get(color_id, {})
             is_enabled = color_settings.get('enabled', True)
             
             if is_enabled and color['name'] in self.color_vars and self.color_vars[color['name']].get():
                 enabled_colors.append(color)
         return enabled_colors
     
-    def _paint_color(self, color, total_pixels_painted, pixel_limit):
-        """Paint a specific color and return updated pixel count"""
-        from main import find_pixels_to_paint_from_map
-        import pyautogui
-        
-        target_rgb = tuple(color["rgb"])
-        if target_rgb not in self.data_manager.color_position_map:  # FIXED: Use data_manager
-            return total_pixels_painted
-        
-        # Find pixels to paint
-        target_bgr = target_rgb[::-1]
-        positions = find_pixels_to_paint_from_map(
-            self.data_manager.pixel_map, target_bgr, tolerance=self.tolerance_var.get()  # FIXED: Use data_manager
-        )
-        
-        if not positions:
-            return total_pixels_painted
-        
-        # Limit positions to not exceed pixel limit
-        remaining_pixels = pixel_limit - total_pixels_painted
-        if len(positions) > remaining_pixels:
-            positions = positions[:remaining_pixels]
-        
-        self.message_queue.put({
-            'type': 'log',
-            'message': f"Painting {len(positions)} pixels with {color['name']} "
-                      f"(Total: {total_pixels_painted + len(positions)}/{pixel_limit})"
-        })
-        
-        # Click color in palette
-        px, py = self.data_manager.color_position_map[target_rgb]  # FIXED: Use data_manager
-        pyautogui.click(px, py)
-        time.sleep(0.2)
-        
-        # Paint positions
-        for pos_i, (x, y) in enumerate(positions):
-            if not self.is_running:
-                break
-            
-            pyautogui.click(x + self.data_manager.canvas_region[0], y + self.data_manager.canvas_region[1])  # FIXED: Use data_manager
-            time.sleep(self.delay_var.get() / 1000.0)
-            total_pixels_painted += 1
-            
-            # Update progress every 10 pixels
-            if pos_i % 10 == 0 or pos_i == len(positions) - 1:
-                progress = (total_pixels_painted / pixel_limit) * 100
-                self.message_queue.put({
-                    'type': 'progress',
-                    'progress': min(progress, 100),
-                    'status': f"Painting {color['name']} ({total_pixels_painted}/{pixel_limit} pixels)"
-                })
-            
-            if total_pixels_painted >= pixel_limit:
-                break
-        
-        return total_pixels_painted
+    # Remove these methods (they're now in the worker classes):
+    # - _analyze_worker (moved to AnalysisWorker)
+    # - _bot_worker (moved to BotWorker)  
+    # - _paint_color (moved to BotWorker)
     
-    def _stop_bot(self):
-        """Stop the painting bot"""
-        self.is_running = False
-        self.status_label.config(text="Stopping...")
-        self._log_message("Stopping bot...")
-
     # ==================== UI HELPERS ====================
     
     def _log_message(self, message):
