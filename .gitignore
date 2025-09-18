@@ -3,7 +3,12 @@
 *.jpeg
 *.gif
 *.spec
+
+*.zip
+
 .venv
 __pycache__
 build
 dist
+
+user_settings.json

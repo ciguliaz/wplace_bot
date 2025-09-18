@@ -6,7 +6,8 @@ import keyboard
 import math
 import cv2
 import statistics
-from data import color_palette
+import json
+import os
 
 
 def get_screen(region=None):
@@ -184,9 +185,9 @@ def estimate_pixel_size(img, min_size=5, max_size=50, debug_filename="debug_size
 
     # print(f"Debug: Found {len(preview_sizes)} previews, {len(pixel_sizes)} pixels, {filtered_out} filtered out")
 
-    # Add text to the debug image
-    text = f"Estimated Pixel Size: {estimated_size}"
-    cv2.putText(debug_img, text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+    # # Add text to the debug image
+    # text = f"Estimated Pixel Size: {estimated_size}"
+    # cv2.putText(debug_img, text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
     cv2.imwrite(debug_filename, debug_img)
     print(f"Size estimation debug image saved: {debug_filename}")
 
@@ -398,7 +399,42 @@ def find_pixels_to_paint_from_map(pixel_map, target_bgr, tolerance=5):
     return matches
 
 
+def load_color_palette():
+    """Load color palette from JSON file"""
+    try:
+        with open('colors.json', 'r') as f:
+            data = json.load(f)
+            return data['color_palette']
+    except Exception as e:
+        print(f"Failed to load colors.json: {e}")
+        return []
+
+
+def load_user_settings():
+    """Load user settings to get bought status"""
+    try:
+        if os.path.exists('user_settings.json'):
+            with open('user_settings.json', 'r') as f:
+                return json.load(f)
+        return {"colors": {}}
+    except Exception as e:
+        print(f"Failed to load user settings: {e}")
+        return {"colors": {}}
+
+
+def is_color_bought(color, user_settings):
+    """Check if a premium color is bought"""
+    if not color.get('premium', False):
+        return True  # Free colors are always "bought"
+    
+    color_id = str(color['id'])
+    return user_settings.get('colors', {}).get(color_id, {}).get('bought', False)
+
+
 def main():
+    color_palette = load_color_palette()
+    user_settings = load_user_settings()
+
     print("Focus the browser window. Press Enter to continue...")
     input()
     canvas_region = select_region()
@@ -448,8 +484,10 @@ def main():
             print("Stopped by user.")
             break
 
-        if color["premium"] == True and color.get("bought") == False:
-            continue  # Skip not bought premium colors
+        # Check bought status from user_settings.json ONLY
+        if not is_color_bought(color, user_settings):
+            print(f"Skipping {color['name']} - not bought")
+            continue
 
         target_rgb = tuple(color["rgb"])
         if target_rgb in color_position_map:
