@@ -8,6 +8,8 @@ import queue
 import tkinter as tk
 import cv2
 
+# Import the new DataManager
+from core.data_manager import DataManager
 
 class RegionSelector:
     """Overlay window for drag-to-select region functionality"""
@@ -107,16 +109,10 @@ class PlaceBotGUI:
         self.root.title("Place Bot - Pixel Art Automation")
         self.root.geometry("800x800")
         
-        # Initialize data
-        self.color_palette = self.load_color_palette()
-        self.user_settings = self.load_user_settings()
+        # Initialize data manager
+        self.data_manager = DataManager()
         
-        # State variables
-        self.canvas_region = self.user_settings.get('preferences', {}).get('last_canvas_region')
-        self.palette_region = self.user_settings.get('preferences', {}).get('last_palette_region')
-        self.pixel_map = None
-        self.color_position_map = None
-        self.pixel_size = None
+        # State variables (now delegated to data_manager)
         self.is_running = False
         self.bot_thread = None
         
@@ -133,124 +129,33 @@ class PlaceBotGUI:
         self.load_saved_regions()
         self.process_queue()
 
-    # ==================== DATA MANAGEMENT ====================
+    # ==================== DATA MANAGEMENT (delegated to DataManager) ====================
     
-    def load_color_palette(self):
-        """Load color palette from JSON file, excluding ignored colors"""
-        try:
-            with open('colors.json', 'r') as f:
-                data = json.load(f)
-                filtered_palette = [
-                    color for color in data['color_palette'] 
-                    if not color.get('ignore', False)
-                ]
-                print(f"Loaded {len(filtered_palette)} colors (filtered out ignored colors)")
-                return filtered_palette
-        except FileNotFoundError:
-            messagebox.showerror("Error", "colors.json not found!")
-            return []
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to load colors.json: {e}")
-            return []
-
-    def load_user_settings(self):
-        """Load user settings from JSON file"""
-        default_settings = {
-            "colors": {},
-            "preferences": {
-                "color_tolerance": 5,
-                "click_delay": 20,
-                "pixel_limit": 50,
-                "auto_save_regions": True
-            }
-        }
-        
-        try:
-            if os.path.exists('user_settings.json'):
-                with open('user_settings.json', 'r') as f:
-                    settings = json.load(f)
-                    
-                    # Migrate old format if needed
-                    if 'bought_colors' in settings or 'enabled_colors' in settings:
-                        settings = self._migrate_old_format(settings)
-                    
-                    # Merge with defaults
-                    for key in default_settings:
-                        if key not in settings:
-                            settings[key] = default_settings[key]
-                    return settings
-            else:
-                return default_settings
-        except Exception as e:
-            print(f"Failed to load user settings: {e}")
-            return default_settings
-
-    def _migrate_old_format(self, old_settings):
-        """Convert old settings format to new consolidated format"""
-        new_settings = {
-            "colors": {},
-            "preferences": old_settings.get('preferences', {})
-        }
-        
-        # Get all color IDs
-        all_color_ids = set()
-        if 'bought_colors' in old_settings:
-            all_color_ids.update(old_settings['bought_colors'].keys())
-        if 'enabled_colors' in old_settings:
-            all_color_ids.update(old_settings['enabled_colors'].keys())
-        
-        # Convert to new format
-        for color_id in all_color_ids:
-            color_data = {}
-            if color_id in old_settings.get('enabled_colors', {}):
-                color_data['enabled'] = old_settings['enabled_colors'][color_id]
-            if color_id in old_settings.get('bought_colors', {}):
-                color_data['bought'] = old_settings['bought_colors'][color_id]
-            new_settings['colors'][color_id] = color_data
-        
-        return new_settings
-
     def save_user_settings(self):
-        """Save user settings to JSON file"""
-        try:
-            # Update preferences
-            self.user_settings['preferences']['color_tolerance'] = self.tolerance_var.get()
-            self.user_settings['preferences']['click_delay'] = self.delay_var.get()
-            self.user_settings['preferences']['pixel_limit'] = self.pixel_limit_var.get()
+        """Save user settings including UI state"""
+        # Update preferences from UI
+        self.data_manager.update_preference('color_tolerance', self.tolerance_var.get())
+        self.data_manager.update_preference('click_delay', self.delay_var.get())
+        self.data_manager.update_preference('pixel_limit', self.pixel_limit_var.get())
+        
+        # Save color settings from UI
+        for color in self.data_manager.color_palette:
+            color_id = str(color['id'])
             
-            # Save current regions
-            if self.canvas_region:
-                self.user_settings['preferences']['last_canvas_region'] = self.canvas_region
-            if self.palette_region:
-                self.user_settings['preferences']['last_palette_region'] = self.palette_region
+            # Save enabled status
+            if color['name'] in self.color_vars:
+                self.data_manager.set_color_setting(color_id, 'enabled', self.color_vars[color['name']].get())
             
-            # Save color settings
-            for color in self.color_palette:
-                color_id = str(color['id'])
-                
-                if color_id not in self.user_settings['colors']:
-                    self.user_settings['colors'][color_id] = {}
-                
-                # Save enabled status
-                if color['name'] in self.color_vars:
-                    self.user_settings['colors'][color_id]['enabled'] = self.color_vars[color['name']].get()
-                
-                # Save bought status (only for premium colors)
-                if color.get('premium', False) and color['name'] in self.bought_vars:
-                    self.user_settings['colors'][color_id]['bought'] = self.bought_vars[color['name']].get()
-            
-            with open('user_settings.json', 'w') as f:
-                json.dump(self.user_settings, f, indent=2)
-                
-        except Exception as e:
-            print(f"Failed to save user settings: {e}")
+            # Save bought status (only for premium colors)
+            if color.get('premium', False) and color['name'] in self.bought_vars:
+                self.data_manager.set_color_setting(color_id, 'bought', self.bought_vars[color['name']].get())
 
     def load_saved_regions(self):
         """Load and display saved regions"""
-        if self.canvas_region:
-            self.canvas_status.config(text=f"Loaded: {self.canvas_region}", foreground="blue")
-        if self.palette_region:
-            self.palette_status.config(text=f"Loaded: {self.palette_region}", foreground="blue")
+        if self.data_manager.canvas_region:
+            self.canvas_status.config(text=f"Loaded: {self.data_manager.canvas_region}", foreground="blue")
+        if self.data_manager.palette_region:
+            self.palette_status.config(text=f"Loaded: {self.data_manager.palette_region}", foreground="blue")
         self._check_ready_for_analysis()
 
     # ==================== UI SETUP ====================
@@ -333,8 +238,8 @@ class PlaceBotGUI:
         settings_frame.pack(fill='x', padx=10, pady=5)
         
         # Load saved settings
-        saved_tolerance = self.user_settings['preferences']['color_tolerance']
-        saved_delay = self.user_settings['preferences']['click_delay']
+        saved_tolerance = self.data_manager.user_settings['preferences']['color_tolerance']
+        saved_delay = self.data_manager.user_settings['preferences']['click_delay']
         
         # Tolerance setting
         tolerance_frame = ttk.Frame(settings_frame)
@@ -404,7 +309,7 @@ class PlaceBotGUI:
     
     def _create_color_widgets(self, parent, mousewheel_handler):
         """Create color control widgets"""
-        for color in self.color_palette:
+        for color in self.data_manager.color_palette:  # FIXED: Use data_manager
             color_frame = ttk.Frame(parent)
             color_frame.pack(fill='x', padx=10, pady=2)
             color_frame.bind("<MouseWheel>", mousewheel_handler)
@@ -420,7 +325,7 @@ class PlaceBotGUI:
             
             # Load saved state
             color_id = str(color['id'])
-            color_settings = self.user_settings['colors'].get(color_id, {})
+            color_settings = self.data_manager.user_settings['colors'].get(color_id, {})  # FIXED: Use data_manager
             is_bought = color_settings.get('bought', False) if color.get('premium', False) else True
             default_enabled = not color.get('premium', False) or is_bought
             is_enabled = color_settings.get('enabled', default_enabled)
@@ -539,7 +444,7 @@ class PlaceBotGUI:
         
         ttk.Label(limit_frame, text="Pixel Limit (stop after painting):").pack(side='left')
         
-        saved_pixel_limit = self.user_settings['preferences'].get('pixel_limit', 50)
+        saved_pixel_limit = self.data_manager.user_settings['preferences'].get('pixel_limit', 50)  # FIXED: Use data_manager
         self.pixel_limit_var = tk.IntVar(value=saved_pixel_limit)
         
         self.pixel_limit_entry = ttk.Entry(limit_frame, textvariable=self.pixel_limit_var, width=8)
@@ -595,12 +500,8 @@ class PlaceBotGUI:
             color_id = str(color['id'])
             new_bought_status = self.bought_vars[color_name].get()
             
-            # Update user_settings.json
-            if color_id not in self.user_settings['colors']:
-                self.user_settings['colors'][color_id] = {}
-            self.user_settings['colors'][color_id]['bought'] = new_bought_status
-            
-            self.save_user_settings()
+            # Update using data_manager
+            self.data_manager.set_color_setting(color_id, 'bought', new_bought_status)  # FIXED: Use data_manager
             self._update_color_label(color, new_bought_status)
             
         except Exception as e:
@@ -632,7 +533,7 @@ class PlaceBotGUI:
 
     def _enable_only_free(self):
         """Enable only free colors"""
-        for color in self.color_palette:
+        for color in self.data_manager.color_palette:  # FIXED: Use data_manager
             is_free = not color.get('premium', False)
             if color['name'] in self.color_vars:
                 self.color_vars[color['name']].set(is_free)
@@ -640,9 +541,9 @@ class PlaceBotGUI:
 
     def _enable_available_colors(self):
         """Enable all available colors (free + bought premium colors)"""
-        for color in self.color_palette:
+        for color in self.data_manager.color_palette:  # FIXED: Use data_manager
             color_id = str(color['id'])
-            color_settings = self.user_settings['colors'].get(color_id, {})
+            color_settings = self.data_manager.user_settings['colors'].get(color_id, {})  # FIXED: Use data_manager
             is_bought = color_settings.get('bought', False) if color.get('premium', False) else True
             is_available = not color.get('premium', False) or is_bought
             
@@ -666,9 +567,8 @@ class PlaceBotGUI:
         """Handle canvas region selection"""
         self.root.deiconify()
         if region:
-            self.canvas_region = region
+            self.data_manager.set_canvas_region(region)  # FIXED: Use data_manager
             self.canvas_status.config(text=f"Selected: {region}", foreground="green")
-            self.save_user_settings()
         else:
             self._log_message("Canvas region selection cancelled")
         self._check_ready_for_analysis()
@@ -677,16 +577,15 @@ class PlaceBotGUI:
         """Handle palette region selection"""
         self.root.deiconify()
         if region:
-            self.palette_region = region
+            self.data_manager.set_palette_region(region)  # FIXED: Use data_manager
             self.palette_status.config(text=f"Selected: {region}", foreground="green")
-            self.save_user_settings()
         else:
             self._log_message("Palette region selection cancelled")
         self._check_ready_for_analysis()
     
     def _check_ready_for_analysis(self):
         """Enable analysis button if both regions are selected"""
-        if self.canvas_region and self.palette_region:
+        if self.data_manager.canvas_region and self.data_manager.palette_region:  # FIXED: Use data_manager
             self.analyze_btn.config(state='normal')
 
     # ==================== ANALYSIS AND BOT ====================
@@ -707,25 +606,28 @@ class PlaceBotGUI:
             from main import (get_screen, estimate_pixel_size, get_preview_positions_from_estimation,
                             build_pixel_map, detect_palette_colors, save_palette_debug_image)
             
-            # Take screenshots
-            palette_img_rgb = get_screen(self.palette_region)
-            canvas_img_rgb = get_screen(self.canvas_region)
+            # Take screenshots using data_manager regions
+            palette_img_rgb = get_screen(self.data_manager.palette_region)  # FIXED: Use data_manager
+            canvas_img_rgb = get_screen(self.data_manager.canvas_region)    # FIXED: Use data_manager
             canvas_img_bgr = cv2.cvtColor(canvas_img_rgb, cv2.COLOR_RGB2BGR)
             
             # Analyze
-            self.pixel_size = estimate_pixel_size(canvas_img_bgr)
-            preview_positions = get_preview_positions_from_estimation(canvas_img_bgr, self.pixel_size)
-            self.pixel_map = build_pixel_map(canvas_img_bgr, self.pixel_size, preview_positions)
-            self.color_position_map = detect_palette_colors(
-                palette_img_rgb, self.palette_region, self.color_palette
+            pixel_size = estimate_pixel_size(canvas_img_bgr)
+            preview_positions = get_preview_positions_from_estimation(canvas_img_bgr, pixel_size)
+            pixel_map = build_pixel_map(canvas_img_bgr, pixel_size, preview_positions)
+            color_position_map = detect_palette_colors(
+                palette_img_rgb, self.data_manager.palette_region, self.data_manager.color_palette  # FIXED: Use data_manager
             )
-            save_palette_debug_image(palette_img_rgb, self.color_position_map, self.palette_region)
+            save_palette_debug_image(palette_img_rgb, color_position_map, self.data_manager.palette_region)  # FIXED: Use data_manager
+            
+            # Store results in data_manager
+            self.data_manager.set_analysis_results(pixel_size, pixel_map, color_position_map)  # FIXED: Use data_manager
             
             self.message_queue.put({
                 'type': 'analysis_complete',
-                'pixel_size': self.pixel_size,
-                'pixel_count': len(self.pixel_map),
-                'colors_found': len(self.color_position_map)
+                'pixel_size': pixel_size,
+                'pixel_count': len(pixel_map),
+                'colors_found': len(color_position_map)
             })
             
         except Exception as e:
@@ -733,7 +635,7 @@ class PlaceBotGUI:
     
     def _start_bot(self):
         """Start the painting bot"""
-        if not self.pixel_map or not self.color_position_map:
+        if not self.data_manager.has_analysis_data():  # FIXED: Use data_manager
             messagebox.showerror("Error", "Please run analysis first!")
             return
         
@@ -781,9 +683,9 @@ class PlaceBotGUI:
     def _get_enabled_colors(self):
         """Get list of enabled colors"""
         enabled_colors = []
-        for color in self.color_palette:
+        for color in self.data_manager.color_palette:  # FIXED: Use data_manager
             color_id = str(color['id'])
-            color_settings = self.user_settings['colors'].get(color_id, {})
+            color_settings = self.data_manager.user_settings['colors'].get(color_id, {})  # FIXED: Use data_manager
             is_enabled = color_settings.get('enabled', True)
             
             if is_enabled and color['name'] in self.color_vars and self.color_vars[color['name']].get():
@@ -796,13 +698,13 @@ class PlaceBotGUI:
         import pyautogui
         
         target_rgb = tuple(color["rgb"])
-        if target_rgb not in self.color_position_map:
+        if target_rgb not in self.data_manager.color_position_map:  # FIXED: Use data_manager
             return total_pixels_painted
         
         # Find pixels to paint
         target_bgr = target_rgb[::-1]
         positions = find_pixels_to_paint_from_map(
-            self.pixel_map, target_bgr, tolerance=self.tolerance_var.get()
+            self.data_manager.pixel_map, target_bgr, tolerance=self.tolerance_var.get()  # FIXED: Use data_manager
         )
         
         if not positions:
@@ -820,7 +722,7 @@ class PlaceBotGUI:
         })
         
         # Click color in palette
-        px, py = self.color_position_map[target_rgb]
+        px, py = self.data_manager.color_position_map[target_rgb]  # FIXED: Use data_manager
         pyautogui.click(px, py)
         time.sleep(0.2)
         
@@ -829,7 +731,7 @@ class PlaceBotGUI:
             if not self.is_running:
                 break
             
-            pyautogui.click(x + self.canvas_region[0], y + self.canvas_region[1])
+            pyautogui.click(x + self.data_manager.canvas_region[0], y + self.data_manager.canvas_region[1])  # FIXED: Use data_manager
             time.sleep(self.delay_var.get() / 1000.0)
             total_pixels_painted += 1
             
@@ -889,14 +791,14 @@ class PlaceBotGUI:
     
     def _update_stats(self):
         """Update statistics display"""
-        if not self.pixel_map or not self.color_position_map:
+        if not self.data_manager.has_analysis_data():  # FIXED: Use data_manager
             return
         
         stats = f"""Analysis Results:
         
-Pixel Size: {self.pixel_size}x{self.pixel_size}
-Total Pixels Detected: {len(self.pixel_map)}
-Colors Found in Palette: {len(self.color_position_map)}
+Pixel Size: {self.data_manager.pixel_size}x{self.data_manager.pixel_size}
+Total Pixels Detected: {len(self.data_manager.pixel_map)}
+Colors Found in Palette: {len(self.data_manager.color_position_map)}
 
 Enabled Colors: {sum(1 for var in self.color_vars.values() if var.get())}
 Total Colors: {len(self.color_vars)}
