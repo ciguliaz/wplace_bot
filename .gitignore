@@ -5,10 +5,11 @@
 *.spec
 
 *.zip
-
+*.bat
 .venv
 __pycache__
 build
 dist
+temp
 
 user_settings.json

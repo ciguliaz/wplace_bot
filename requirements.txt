@@ -1,4 +1,3 @@
-# install package by "pip install -r requirement.txt"
 pyautogui
 numpy
 pillow

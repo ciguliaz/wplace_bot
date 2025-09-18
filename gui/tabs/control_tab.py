@@ -1,0 +1,186 @@
+import tkinter as tk
+from tkinter import ttk, messagebox
+
+class ControlTab:
+    """Control tab for running the bot"""
+    
+    def __init__(self, parent, main_window):
+        self.parent = parent
+        self.main_window = main_window
+        self.data_manager = main_window.data_manager
+        self.bot_worker = main_window.bot_worker
+        self.message_queue = main_window.message_queue
+        
+        # Create the tab frame
+        self.frame = ttk.Frame(parent)
+        
+        # UI elements that need to be accessed from main window
+        self.status_label = None
+        self.progress_var = None
+        self.progress_bar = None
+        self.start_btn = None
+        self.stop_btn = None
+        self.log_text = None
+        self.pixel_limit_var = None
+        self.pixel_limit_entry = None
+        self.pixel_limit_scale = None
+        
+        # Create the UI
+        self._create_ui()
+    
+    def _create_ui(self):
+        """Create control tab UI"""
+        self._create_status_frame()
+        self._create_bot_settings()
+        self._create_log_frame()
+    
+    def _create_status_frame(self):
+        """Create status frame"""
+        status_frame = ttk.LabelFrame(self.frame, text="Status", padding=10)
+        status_frame.pack(fill='x', padx=10, pady=5)
+        
+        self.status_label = ttk.Label(status_frame, text="Ready", font=('Arial', 12, 'bold'))
+        self.status_label.pack(pady=5)
+        
+        self.progress_var = tk.DoubleVar()
+        self.progress_bar = ttk.Progressbar(status_frame, variable=self.progress_var, maximum=100)
+        self.progress_bar.pack(fill='x', pady=5)
+        
+        # Control buttons
+        button_frame = ttk.Frame(status_frame)
+        button_frame.pack(pady=10)
+        
+        self.start_btn = ttk.Button(button_frame, text="Start Painting", 
+                                   command=self._start_bot, state='disabled')
+        self.start_btn.pack(side='left', padx=5)
+        
+        self.stop_btn = ttk.Button(button_frame, text="Stop", 
+                                  command=self._stop_bot, state='disabled')
+        self.stop_btn.pack(side='left', padx=5)
+    
+    def _create_bot_settings(self):
+        """Create bot settings frame"""
+        bot_settings_frame = ttk.LabelFrame(self.frame, text="Bot Settings", padding=10)
+        bot_settings_frame.pack(fill='x', padx=10, pady=5)
+        
+        # Pixel limit setting
+        limit_frame = ttk.Frame(bot_settings_frame)
+        limit_frame.pack(fill='x', pady=5)
+        
+        ttk.Label(limit_frame, text="Pixel Limit (stop after painting):").pack(side='left')
+        
+        saved_pixel_limit = self.data_manager.user_settings['preferences'].get('pixel_limit', 50)
+        self.pixel_limit_var = tk.IntVar(value=saved_pixel_limit)
+        
+        self.pixel_limit_entry = ttk.Entry(limit_frame, textvariable=self.pixel_limit_var, width=8)
+        self.pixel_limit_entry.pack(side='right', padx=(5, 0))
+        self.pixel_limit_entry.bind('<KeyRelease>', self._on_pixel_limit_entry_change)
+        self.pixel_limit_entry.bind('<FocusOut>', self._on_pixel_limit_entry_change)
+        
+        ttk.Label(limit_frame, text="pixels").pack(side='right', padx=(5, 5))
+        
+        # Pixel limit slider
+        slider_frame = ttk.Frame(bot_settings_frame)
+        slider_frame.pack(fill='x', pady=2)
+        
+        ttk.Label(slider_frame, text="Quick Select:").pack(side='left')
+        self.pixel_limit_scale = ttk.Scale(slider_frame, from_=1, to=1000, 
+                                          variable=self.pixel_limit_var, orient='horizontal',
+                                          command=self._update_pixel_limit_from_slider)
+        self.pixel_limit_scale.pack(side='right', fill='x', expand=True, padx=(10, 0))
+    
+    def _create_log_frame(self):
+        """Create log frame"""
+        log_frame = ttk.LabelFrame(self.frame, text="Log", padding=10)
+        log_frame.pack(fill='both', expand=True, padx=10, pady=5)
+        
+        self.log_text = tk.Text(log_frame, state='disabled')
+        log_scrollbar = ttk.Scrollbar(log_frame, command=self.log_text.yview)
+        self.log_text.config(yscrollcommand=log_scrollbar.set)
+        
+        self.log_text.pack(side='left', fill='both', expand=True)
+        log_scrollbar.pack(side='right', fill='y')
+    
+    def _update_pixel_limit_from_slider(self, value):
+        """Update pixel limit when slider changes"""
+        new_value = int(float(value))
+        self.pixel_limit_var.set(new_value)
+        self.main_window.save_user_settings()
+    
+    def _on_pixel_limit_entry_change(self, event=None):
+        """Handle manual entry changes for pixel limit"""
+        try:
+            new_value = self.pixel_limit_var.get()
+            new_value = max(1, min(1000, new_value))  # Clamp to valid range
+            self.pixel_limit_var.set(new_value)
+            self.pixel_limit_scale.set(new_value)
+            self.main_window.save_user_settings()
+        except tk.TclError:
+            pass  # Invalid input, ignore
+    
+    def _start_bot(self):
+        """Start the painting bot"""
+        if not self.data_manager.has_analysis_data():
+            messagebox.showerror("Error", "Please run analysis first!")
+            return
+        
+        self.main_window.is_running = True
+        self.start_btn.config(state='disabled')
+        self.stop_btn.config(state='normal')
+        self.status_label.config(text="Painting...")
+        self.log_message("Starting painting bot...")
+        
+        # Get enabled colors and settings
+        enabled_colors = self.main_window._get_enabled_colors()
+        settings = {
+            'pixel_limit': self.pixel_limit_var.get(),
+            'tolerance': self.main_window.setup_tab_obj.tolerance_var.get(),
+            'delay': self.main_window.setup_tab_obj.delay_var.get()
+        }
+        
+        # Use the bot worker
+        self.bot_worker.start_bot(self.message_queue, enabled_colors, settings)
+    
+    def _stop_bot(self):
+        """Stop the painting bot"""
+        self.main_window.is_running = False
+        self.bot_worker.stop_bot()
+        self.status_label.config(text="Stopping...")
+        self.log_message("Stopping bot...")
+    
+    def log_message(self, message):
+        """Add message to log"""
+        self.log_text.config(state='normal')
+        self.log_text.insert(tk.END, f"{message}\n")
+        self.log_text.see(tk.END)
+        self.log_text.config(state='disabled')
+    
+    def update_progress(self, progress, status_text):
+        """Update progress bar and status"""
+        self.progress_var.set(progress)
+        self.status_label.config(text=status_text)
+    
+    def on_bot_complete(self, total_painted, limit_reached):
+        """Handle bot completion"""
+        self.main_window.is_running = False
+        self.start_btn.config(state='normal')
+        self.stop_btn.config(state='disabled')
+        
+        if limit_reached:
+            self.status_label.config(text=f"Pixel limit reached! ({total_painted} pixels)")
+            self.log_message(f"Bot stopped - pixel limit reached! Total pixels painted: {total_painted}")
+        else:
+            self.status_label.config(text=f"Painting complete! ({total_painted} pixels)")
+            self.log_message(f"Painting completed successfully! Total pixels painted: {total_painted}")
+    
+    def on_bot_error(self, error_message):
+        """Handle bot error"""
+        self.main_window.is_running = False
+        self.start_btn.config(state='normal')
+        self.stop_btn.config(state='disabled')
+        self.status_label.config(text=f"Error: {error_message}")
+        self.log_message(f"Bot error: {error_message}")
+    
+    def enable_start_button(self):
+        """Enable the start button (called after successful analysis)"""
+        self.start_btn.config(state='normal')
