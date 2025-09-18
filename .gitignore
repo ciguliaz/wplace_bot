@@ -10,5 +10,6 @@
 __pycache__
 build
 dist
+temp
 
 user_settings.json
