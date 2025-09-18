@@ -14,6 +14,7 @@ from core.analysis_worker import AnalysisWorker
 from core.bot_worker import BotWorker
 from gui.region_selector import RegionSelector
 from gui.tabs.setup_tab import SetupTab
+from gui.tabs.colors_tab import ColorsTab
 
 class PlaceBotGUI:
     """Main GUI application for Place Bot"""
@@ -32,9 +33,8 @@ class PlaceBotGUI:
         self.is_running = False
         
         # UI variables
-        self.color_vars = {}
-        self.bought_vars = {}
-        self.color_labels = {}
+        # Add reference to colors tab
+        self.colors_tab_obj = None
         
         # Thread communication
         self.message_queue = queue.Queue()
@@ -57,17 +57,18 @@ class PlaceBotGUI:
             self.data_manager.update_preference('click_delay', self.setup_tab_obj.delay_var.get())
         self.data_manager.update_preference('pixel_limit', self.pixel_limit_var.get())
         
-        # Save color settings from UI
-        for color in self.data_manager.color_palette:
-            color_id = str(color['id'])
-            
-            # Save enabled status
-            if color['name'] in self.color_vars:
-                self.data_manager.set_color_setting(color_id, 'enabled', self.color_vars[color['name']].get())
-            
-            # Save bought status (only for premium colors)
-            if color.get('premium', False) and color['name'] in self.bought_vars:
-                self.data_manager.set_color_setting(color_id, 'bought', self.bought_vars[color['name']].get())
+        # Save color settings from colors tab
+        if self.colors_tab_obj:
+            for color in self.data_manager.color_palette:
+                color_id = str(color['id'])
+                
+                # Save enabled status
+                if color['name'] in self.colors_tab_obj.color_vars:
+                    self.data_manager.set_color_setting(color_id, 'enabled', self.colors_tab_obj.color_vars[color['name']].get())
+                
+                # Save bought status (only for premium colors)
+                if color.get('premium', False) and color['name'] in self.colors_tab_obj.bought_vars:
+                    self.data_manager.set_color_setting(color_id, 'bought', self.colors_tab_obj.bought_vars[color['name']].get())
 
     def load_saved_regions(self):
         """Load and display saved regions - delegated to setup tab"""
@@ -85,117 +86,30 @@ class PlaceBotGUI:
         self.setup_tab_obj = SetupTab(notebook, self)
         notebook.add(self.setup_tab_obj.frame, text="Setup")
         
+        # Create colors tab using the new class
+        self.colors_tab_obj = ColorsTab(notebook, self)
+        notebook.add(self.colors_tab_obj.frame, text="Color Control")
+        
         # Create other tabs (keep existing for now)
-        self.colors_tab = ttk.Frame(notebook)
         self.preview_tab = ttk.Frame(notebook)
         self.control_tab = ttk.Frame(notebook)
         
-        notebook.add(self.colors_tab, text="Color Control")
         notebook.add(self.preview_tab, text="Preview & Debug")
         notebook.add(self.control_tab, text="Bot Control")
         
         # Create tab content
-        # Remove: self._create_setup_tab()  # This is now handled by SetupTab class
-        self._create_colors_tab()
         self._create_preview_tab()
         self._create_control_tab()
-    
-    def _create_colors_tab(self):
-        """Color control tab for enabling/disabling colors"""
-        # Create scrollable frame
-        canvas = tk.Canvas(self.colors_tab)
-        scrollbar = ttk.Scrollbar(self.colors_tab, orient="vertical", command=canvas.yview)
-        scrollable_frame = ttk.Frame(canvas)
-        
-        scrollable_frame.bind("<Configure>", 
-                            lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-        
-        # Mouse wheel scrolling
-        def on_mousewheel(event):
-            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
-        
-        def on_enter(event):
-            canvas.focus_set()
-        
-        # Bind mouse wheel events
-        for widget in [canvas, scrollable_frame, self.colors_tab]:
-            widget.bind("<MouseWheel>", on_mousewheel)
-        canvas.bind("<Enter>", on_enter)
-        
-        # Control buttons
-        control_frame = ttk.Frame(self.colors_tab)
-        control_frame.pack(fill='x', padx=10, pady=5)
-        
-        buttons = [
-            ("Enable All", self._enable_all_colors),
-            ("Disable All", self._disable_all_colors),
-            ("Free Colors", self._enable_only_free),
-            ("Available Colors", self._enable_available_colors)
-        ]
-        
-        for text, command in buttons:
-            ttk.Button(control_frame, text=text, command=command).pack(side='left', padx=5)
-        
-        # Create color checkboxes
-        self._create_color_widgets(scrollable_frame, on_mousewheel)
-        
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
 
-    def _create_color_widgets(self, parent, mousewheel_handler):
-        """Create color control widgets"""
-        for color in self.data_manager.color_palette:
-            color_frame = ttk.Frame(parent)
-            color_frame.pack(fill='x', padx=10, pady=2)
-            color_frame.bind("<MouseWheel>", mousewheel_handler)
-            
-            # Color preview
-            color_canvas = tk.Canvas(color_frame, width=30, height=20)
-            color_canvas.pack(side='left', padx=5)
-            color_canvas.bind("<MouseWheel>", mousewheel_handler)
-            
-            rgb = color['rgb']
-            hex_color = f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
-            color_canvas.create_rectangle(0, 0, 30, 20, fill=hex_color, outline="")
-            
-            # Load saved state
-            color_id = str(color['id'])
-            color_settings = self.data_manager.user_settings['colors'].get(color_id, {})
-            is_bought = color_settings.get('bought', False) if color.get('premium', False) else True
-            default_enabled = not color.get('premium', False) or is_bought
-            is_enabled = color_settings.get('enabled', default_enabled)
-            
-            # Enable/disable checkbox
-            var = tk.BooleanVar(value=is_enabled)
-            self.color_vars[color['name']] = var
-            checkbox = ttk.Checkbutton(color_frame, variable=var, command=self.save_user_settings)
-            checkbox.pack(side='left', padx=5)
-            checkbox.bind("<MouseWheel>", mousewheel_handler)
-            
-            # Color name label
-            label_text = f"{color['name']} ({'Premium' if color.get('premium', False) else 'Free'})"
-            label_color = "green" if (not color.get('premium', False) or is_bought) else "red"
-            
-            name_label = ttk.Label(color_frame, text=label_text, foreground=label_color)
-            name_label.pack(side='left', padx=5)
-            name_label.bind("<MouseWheel>", mousewheel_handler)
-            
-            # Store label reference for updates
-            self.color_labels[color['name']] = name_label
-            
-            # Bought toggle for premium colors
-            if color.get('premium', False):
-                bought_var = tk.BooleanVar(value=is_bought)
-                self.bought_vars[color['name']] = bought_var
-                
-                bought_checkbox = ttk.Checkbutton(
-                    color_frame, text="Bought", variable=bought_var,
-                    command=lambda c=color: self._toggle_bought_status(c)
-                )
-                bought_checkbox.pack(side='left', padx=10)
-                bought_checkbox.bind("<MouseWheel>", mousewheel_handler)
+    # Remove these methods (now in ColorsTab):
+    # - _create_colors_tab()
+    # - _create_color_widgets()
+    # - _toggle_bought_status()
+    # - _update_color_label()
+    # - _enable_all_colors()
+    # - _disable_all_colors()
+    # - _enable_only_free()
+    # - _enable_available_colors()
 
     def _create_preview_tab(self):
         """Preview tab for showing debug images and analysis results"""
@@ -423,16 +337,10 @@ class PlaceBotGUI:
         self._log_message("Stopping bot...")
 
     def _get_enabled_colors(self):
-        """Get list of enabled colors"""
-        enabled_colors = []
-        for color in self.data_manager.color_palette:
-            color_id = str(color['id'])
-            color_settings = self.data_manager.user_settings['colors'].get(color_id, {})
-            is_enabled = color_settings.get('enabled', True)
-            
-            if is_enabled and color['name'] in self.color_vars and self.color_vars[color['name']].get():
-                enabled_colors.append(color)
-        return enabled_colors
+        """Get list of enabled colors from colors tab"""
+        if self.colors_tab_obj:
+            return self.colors_tab_obj.get_enabled_colors()
+        return []
     
     # Remove these methods (they're now in the worker classes):
     # - _analyze_worker (moved to AnalysisWorker)
@@ -482,14 +390,18 @@ class PlaceBotGUI:
         tolerance = self.setup_tab_obj.tolerance_var.get() if self.setup_tab_obj else 5
         delay = self.setup_tab_obj.delay_var.get() if self.setup_tab_obj else 20
         
+        # Get enabled colors count from colors tab
+        enabled_count = len(self.colors_tab_obj.color_vars) if self.colors_tab_obj else 0
+        total_count = len(self.data_manager.color_palette)
+        
         stats = f"""Analysis Results:
         
 Pixel Size: {self.data_manager.pixel_size}x{self.data_manager.pixel_size}
 Total Pixels Detected: {len(self.data_manager.pixel_map)}
 Colors Found in Palette: {len(self.data_manager.color_position_map)}
 
-Enabled Colors: {sum(1 for var in self.color_vars.values() if var.get())}
-Total Colors: {len(self.color_vars)}
+Enabled Colors: {enabled_count}
+Total Colors: {total_count}
 
 Settings:
 Color Tolerance: {tolerance}
