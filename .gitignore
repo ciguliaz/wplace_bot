@@ -5,7 +5,7 @@
 *.spec
 
 *.zip
-
+*.bat
 .venv
 __pycache__
 build

@@ -3,15 +3,10 @@ import tkinter as tk
 from tkinter import ttk
 
 # Import core components
-from core.data_manager import DataManager
-from core.analysis_worker import AnalysisWorker
-from core.bot_worker import BotWorker
+from core import DataManager, AnalysisWorker, BotWorker
 
 # Import tab classes
-from gui.tabs.setup_tab import SetupTab
-from gui.tabs.colors_tab import ColorsTab
-from gui.tabs.control_tab import ControlTab
-from gui.tabs.preview_tab import PreviewTab
+from gui.tabs import SetupTab, ColorsTab, ControlTab, PreviewTab
 
 class PlaceBotGUI:
     """Main GUI application for Place Bot"""
