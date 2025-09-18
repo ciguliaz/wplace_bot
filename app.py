@@ -13,6 +13,7 @@ from core.data_manager import DataManager
 from core.analysis_worker import AnalysisWorker
 from core.bot_worker import BotWorker
 from gui.region_selector import RegionSelector
+from gui.tabs.setup_tab import SetupTab
 
 class PlaceBotGUI:
     """Main GUI application for Place Bot"""
@@ -38,6 +39,9 @@ class PlaceBotGUI:
         # Thread communication
         self.message_queue = queue.Queue()
         
+        # Add reference to setup tab
+        self.setup_tab_obj = None
+        
         # Setup UI and start processing
         self.setup_ui()
         self.load_saved_regions()
@@ -48,8 +52,9 @@ class PlaceBotGUI:
     def save_user_settings(self):
         """Save user settings including UI state"""
         # Update preferences from UI
-        self.data_manager.update_preference('color_tolerance', self.tolerance_var.get())
-        self.data_manager.update_preference('click_delay', self.delay_var.get())
+        if self.setup_tab_obj:
+            self.data_manager.update_preference('color_tolerance', self.setup_tab_obj.tolerance_var.get())
+            self.data_manager.update_preference('click_delay', self.setup_tab_obj.delay_var.get())
         self.data_manager.update_preference('pixel_limit', self.pixel_limit_var.get())
         
         # Save color settings from UI
@@ -65,12 +70,9 @@ class PlaceBotGUI:
                 self.data_manager.set_color_setting(color_id, 'bought', self.bought_vars[color['name']].get())
 
     def load_saved_regions(self):
-        """Load and display saved regions"""
-        if self.data_manager.canvas_region:
-            self.canvas_status.config(text=f"Loaded: {self.data_manager.canvas_region}", foreground="blue")
-        if self.data_manager.palette_region:
-            self.palette_status.config(text=f"Loaded: {self.data_manager.palette_region}", foreground="blue")
-        self._check_ready_for_analysis()
+        """Load and display saved regions - delegated to setup tab"""
+        if self.setup_tab_obj:
+            self.setup_tab_obj._load_saved_regions()
 
     # ==================== UI SETUP ====================
     
@@ -79,103 +81,24 @@ class PlaceBotGUI:
         notebook = ttk.Notebook(self.root)
         notebook.pack(fill='both', expand=True, padx=10, pady=10)
         
-        # Create tabs
-        self.setup_tab = ttk.Frame(notebook)
+        # Create setup tab using the new class
+        self.setup_tab_obj = SetupTab(notebook, self)
+        notebook.add(self.setup_tab_obj.frame, text="Setup")
+        
+        # Create other tabs (keep existing for now)
         self.colors_tab = ttk.Frame(notebook)
         self.preview_tab = ttk.Frame(notebook)
         self.control_tab = ttk.Frame(notebook)
         
-        notebook.add(self.setup_tab, text="Setup")
         notebook.add(self.colors_tab, text="Color Control")
         notebook.add(self.preview_tab, text="Preview & Debug")
         notebook.add(self.control_tab, text="Bot Control")
         
         # Create tab content
-        self._create_setup_tab()
+        # Remove: self._create_setup_tab()  # This is now handled by SetupTab class
         self._create_colors_tab()
         self._create_preview_tab()
         self._create_control_tab()
-    
-    def _create_setup_tab(self):
-        """Setup tab for region selection and analysis"""
-        # Instructions
-        instructions_frame = ttk.LabelFrame(self.setup_tab, text="Instructions", padding=10)
-        instructions_frame.pack(fill='x', padx=10, pady=5)
-        
-        instructions_text = """How to select regions:
-1. Click 'Select Canvas' or 'Select Palette' button
-2. Your screen will show a dark overlay
-3. Click and drag to select the desired region
-4. Release mouse to confirm selection
-5. Press ESC to cancel selection"""
-        
-        ttk.Label(instructions_frame, text=instructions_text, justify='left').pack(anchor='w')
-        
-        # Region Selection
-        region_frame = ttk.LabelFrame(self.setup_tab, text="Region Selection", padding=10)
-        region_frame.pack(fill='x', padx=10, pady=5)
-        
-        # Canvas region
-        canvas_frame = ttk.Frame(region_frame)
-        canvas_frame.pack(fill='x', pady=5)
-        ttk.Label(canvas_frame, text="Canvas Region:").pack(side='left')
-        self.canvas_status = ttk.Label(canvas_frame, text="Not selected", foreground="red")
-        self.canvas_status.pack(side='left', padx=(10, 0))
-        ttk.Button(canvas_frame, text="Select Canvas", 
-                  command=self._select_canvas_region).pack(side='right')
-        
-        # Palette region
-        palette_frame = ttk.Frame(region_frame)
-        palette_frame.pack(fill='x', pady=5)
-        ttk.Label(palette_frame, text="Palette Region:").pack(side='left')
-        self.palette_status = ttk.Label(palette_frame, text="Not selected", foreground="red")
-        self.palette_status.pack(side='left', padx=(10, 0))
-        ttk.Button(palette_frame, text="Select Palette", 
-                  command=self._select_palette_region).pack(side='right')
-        
-        # Analysis
-        analysis_frame = ttk.LabelFrame(self.setup_tab, text="Analysis", padding=10)
-        analysis_frame.pack(fill='x', padx=10, pady=5)
-        
-        self.analyze_btn = ttk.Button(analysis_frame, text="Analyze Canvas & Palette", 
-                                     command=self._analyze_regions, state='disabled')
-        self.analyze_btn.pack(pady=5)
-        self.analysis_status = ttk.Label(analysis_frame, text="Select regions first")
-        self.analysis_status.pack(pady=5)
-        
-        # Settings
-        self._create_settings_frame()
-    
-    def _create_settings_frame(self):
-        """Create settings frame in setup tab"""
-        settings_frame = ttk.LabelFrame(self.setup_tab, text="Settings", padding=10)
-        settings_frame.pack(fill='x', padx=10, pady=5)
-        
-        # Load saved settings
-        saved_tolerance = self.data_manager.user_settings['preferences']['color_tolerance']
-        saved_delay = self.data_manager.user_settings['preferences']['click_delay']
-        
-        # Tolerance setting
-        tolerance_frame = ttk.Frame(settings_frame)
-        tolerance_frame.pack(fill='x', pady=2)
-        ttk.Label(tolerance_frame, text="Color Tolerance:").pack(side='left')
-        self.tolerance_var = tk.IntVar(value=saved_tolerance)
-        tolerance_scale = ttk.Scale(tolerance_frame, from_=1, to=20, variable=self.tolerance_var, 
-                                   orient='horizontal', command=self._update_tolerance_label)
-        tolerance_scale.pack(side='right', fill='x', expand=True, padx=(10, 0))
-        self.tolerance_label = ttk.Label(tolerance_frame, text=str(saved_tolerance))
-        self.tolerance_label.pack(side='right', padx=(5, 10))
-        
-        # Click delay setting
-        delay_frame = ttk.Frame(settings_frame)
-        delay_frame.pack(fill='x', pady=2)
-        ttk.Label(delay_frame, text="Click Delay (ms):").pack(side='left')
-        self.delay_var = tk.IntVar(value=saved_delay)
-        delay_scale = ttk.Scale(delay_frame, from_=10, to=100, variable=self.delay_var, 
-                               orient='horizontal', command=self._update_delay_label)
-        delay_scale.pack(side='right', fill='x', expand=True, padx=(10, 0))
-        self.delay_label = ttk.Label(delay_frame, text=str(saved_delay))
-        self.delay_label.pack(side='right', padx=(5, 10))
     
     def _create_colors_tab(self):
         """Color control tab for enabling/disabling colors"""
@@ -220,10 +143,10 @@ class PlaceBotGUI:
         
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
-    
+
     def _create_color_widgets(self, parent, mousewheel_handler):
         """Create color control widgets"""
-        for color in self.data_manager.color_palette:  # FIXED: Use data_manager
+        for color in self.data_manager.color_palette:
             color_frame = ttk.Frame(parent)
             color_frame.pack(fill='x', padx=10, pady=2)
             color_frame.bind("<MouseWheel>", mousewheel_handler)
@@ -239,7 +162,7 @@ class PlaceBotGUI:
             
             # Load saved state
             color_id = str(color['id'])
-            color_settings = self.data_manager.user_settings['colors'].get(color_id, {})  # FIXED: Use data_manager
+            color_settings = self.data_manager.user_settings['colors'].get(color_id, {})
             is_bought = color_settings.get('bought', False) if color.get('premium', False) else True
             default_enabled = not color.get('premium', False) or is_bought
             is_enabled = color_settings.get('enabled', default_enabled)
@@ -273,7 +196,7 @@ class PlaceBotGUI:
                 )
                 bought_checkbox.pack(side='left', padx=10)
                 bought_checkbox.bind("<MouseWheel>", mousewheel_handler)
-    
+
     def _create_preview_tab(self):
         """Preview tab for showing debug images and analysis results"""
         # Image display
@@ -307,7 +230,7 @@ class PlaceBotGUI:
         
         self.stats_text.pack(side='left', fill='both', expand=True)
         stats_scrollbar.pack(side='right', fill='y')
-    
+
     def _create_control_tab(self):
         """Control tab for running the bot"""
         # Status
@@ -346,7 +269,7 @@ class PlaceBotGUI:
         
         self.log_text.pack(side='left', fill='both', expand=True)
         log_scrollbar.pack(side='right', fill='y')
-    
+
     def _create_bot_settings(self):
         """Create bot settings frame"""
         bot_settings_frame = ttk.LabelFrame(self.control_tab, text="Bot Settings", padding=10)
@@ -358,7 +281,7 @@ class PlaceBotGUI:
         
         ttk.Label(limit_frame, text="Pixel Limit (stop after painting):").pack(side='left')
         
-        saved_pixel_limit = self.data_manager.user_settings['preferences'].get('pixel_limit', 50)  # FIXED: Use data_manager
+        saved_pixel_limit = self.data_manager.user_settings['preferences'].get('pixel_limit', 50)
         self.pixel_limit_var = tk.IntVar(value=saved_pixel_limit)
         
         self.pixel_limit_entry = ttk.Entry(limit_frame, textvariable=self.pixel_limit_var, width=8)
@@ -378,18 +301,6 @@ class PlaceBotGUI:
                                           command=self._update_pixel_limit_from_slider)
         self.pixel_limit_scale.pack(side='right', fill='x', expand=True, padx=(10, 0))
 
-    # ==================== EVENT HANDLERS ====================
-    
-    def _update_tolerance_label(self, value):
-        """Update tolerance value display and save"""
-        self.tolerance_label.config(text=f"{int(float(value))}")
-        self.save_user_settings()
-
-    def _update_delay_label(self, value):
-        """Update delay value display and save"""
-        self.delay_label.config(text=f"{int(float(value))}")
-        self.save_user_settings()
-    
     def _update_pixel_limit_from_slider(self, value):
         """Update pixel limit when slider changes"""
         new_value = int(float(value))
@@ -407,6 +318,20 @@ class PlaceBotGUI:
         except tk.TclError:
             pass  # Invalid input, ignore
 
+    # Remove the entire _create_setup_tab method (and all its helper methods):
+    # - _create_setup_tab()
+    # - _create_settings_frame()
+    # - _update_tolerance_label()
+    # - _update_delay_label()
+    # - _select_canvas_region()
+    # - _select_palette_region() 
+    # - _on_canvas_region_selected()
+    # - _on_palette_region_selected()
+    # - _check_ready_for_analysis()
+    # - _analyze_regions()
+
+    # ==================== EVENT HANDLERS ====================
+    
     def _toggle_bought_status(self, color):
         """Toggle bought status and save to user_settings.json"""
         try:
@@ -465,54 +390,8 @@ class PlaceBotGUI:
                 self.color_vars[color['name']].set(is_available)
         self.save_user_settings()
 
-    # ==================== REGION SELECTION ====================
-    
-    def _select_canvas_region(self):
-        """Start canvas region selection"""
-        self.root.withdraw()
-        RegionSelector(self._on_canvas_region_selected)
-    
-    def _select_palette_region(self):
-        """Start palette region selection"""
-        self.root.withdraw()
-        RegionSelector(self._on_palette_region_selected)
-    
-    def _on_canvas_region_selected(self, region):
-        """Handle canvas region selection"""
-        self.root.deiconify()
-        if region:
-            self.data_manager.set_canvas_region(region)  # FIXED: Use data_manager
-            self.canvas_status.config(text=f"Selected: {region}", foreground="green")
-        else:
-            self._log_message("Canvas region selection cancelled")
-        self._check_ready_for_analysis()
-    
-    def _on_palette_region_selected(self, region):
-        """Handle palette region selection"""
-        self.root.deiconify()
-        if region:
-            self.data_manager.set_palette_region(region)  # FIXED: Use data_manager
-            self.palette_status.config(text=f"Selected: {region}", foreground="green")
-        else:
-            self._log_message("Palette region selection cancelled")
-        self._check_ready_for_analysis()
-    
-    def _check_ready_for_analysis(self):
-        """Enable analysis button if both regions are selected"""
-        if self.data_manager.canvas_region and self.data_manager.palette_region:  # FIXED: Use data_manager
-            self.analyze_btn.config(state='normal')
-
     # ==================== ANALYSIS AND BOT ====================
     
-    def _analyze_regions(self):
-        """Run analysis in a separate thread"""
-        self.analyze_btn.config(state='disabled', text="Analyzing...")
-        self.analysis_status.config(text="Running analysis...")
-        self._log_message("Starting analysis...")
-        
-        # Use the analysis worker instead of creating thread manually
-        self.analysis_worker.start_analysis(self.message_queue)
-
     def _start_bot(self):
         """Start the painting bot"""
         if not self.data_manager.has_analysis_data():
@@ -529,11 +408,11 @@ class PlaceBotGUI:
         enabled_colors = self._get_enabled_colors()
         settings = {
             'pixel_limit': self.pixel_limit_var.get(),
-            'tolerance': self.tolerance_var.get(),
-            'delay': self.delay_var.get()
+            'tolerance': self.setup_tab_obj.tolerance_var.get(),  # Get from setup tab
+            'delay': self.setup_tab_obj.delay_var.get()          # Get from setup tab
         }
         
-        # Use the bot worker instead of creating thread manually
+        # Use the bot worker
         self.bot_worker.start_bot(self.message_queue, enabled_colors, settings)
 
     def _stop_bot(self):
@@ -596,8 +475,12 @@ class PlaceBotGUI:
     
     def _update_stats(self):
         """Update statistics display"""
-        if not self.data_manager.has_analysis_data():  # FIXED: Use data_manager
+        if not self.data_manager.has_analysis_data():
             return
+        
+        # Get tolerance and delay from setup tab
+        tolerance = self.setup_tab_obj.tolerance_var.get() if self.setup_tab_obj else 5
+        delay = self.setup_tab_obj.delay_var.get() if self.setup_tab_obj else 20
         
         stats = f"""Analysis Results:
         
@@ -609,8 +492,8 @@ Enabled Colors: {sum(1 for var in self.color_vars.values() if var.get())}
 Total Colors: {len(self.color_vars)}
 
 Settings:
-Color Tolerance: {self.tolerance_var.get()}
-Click Delay: {self.delay_var.get()}ms
+Color Tolerance: {tolerance}
+Click Delay: {delay}ms
 Pixel Limit: {self.pixel_limit_var.get()}
 """
         
@@ -631,11 +514,7 @@ Pixel Limit: {self.pixel_limit_var.get()}
                     self._log_message(message['message'])
                 
                 elif message['type'] == 'analysis_complete':
-                    self.analyze_btn.config(state='normal', text="Analyze Canvas & Palette")
-                    self.analysis_status.config(
-                        text=f"Analysis complete! Pixel size: {message['pixel_size']}, "
-                             f"Pixels: {message['pixel_count']}, Colors: {message['colors_found']}"
-                    )
+                    self.setup_tab_obj.on_analysis_complete(message)
                     self.start_btn.config(state='normal')
                     self._update_stats()
                     self._log_message(
@@ -644,8 +523,7 @@ Pixel Limit: {self.pixel_limit_var.get()}
                     )
                     
                 elif message['type'] == 'analysis_error':
-                    self.analyze_btn.config(state='normal', text="Analyze Canvas & Palette")
-                    self.analysis_status.config(text=f"Analysis failed: {message['error']}")
+                    self.setup_tab_obj.on_analysis_error(message)
                     self._log_message(f"Analysis failed: {message['error']}")
                     
                 elif message['type'] == 'progress':
