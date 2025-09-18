@@ -12,9 +12,10 @@ import cv2
 from core.data_manager import DataManager
 from core.analysis_worker import AnalysisWorker
 from core.bot_worker import BotWorker
-from gui.region_selector import RegionSelector
 from gui.tabs.setup_tab import SetupTab
 from gui.tabs.colors_tab import ColorsTab
+from gui.tabs.control_tab import ControlTab
+from gui.tabs.preview_tab import PreviewTab
 
 class PlaceBotGUI:
     """Main GUI application for Place Bot"""
@@ -33,14 +34,14 @@ class PlaceBotGUI:
         self.is_running = False
         
         # UI variables
-        # Add reference to colors tab
+        # Add references to all tabs
+        self.setup_tab_obj = None
         self.colors_tab_obj = None
+        self.control_tab_obj = None
+        self.preview_tab_obj = None
         
         # Thread communication
         self.message_queue = queue.Queue()
-        
-        # Add reference to setup tab
-        self.setup_tab_obj = None
         
         # Setup UI and start processing
         self.setup_ui()
@@ -55,7 +56,9 @@ class PlaceBotGUI:
         if self.setup_tab_obj:
             self.data_manager.update_preference('color_tolerance', self.setup_tab_obj.tolerance_var.get())
             self.data_manager.update_preference('click_delay', self.setup_tab_obj.delay_var.get())
-        self.data_manager.update_preference('pixel_limit', self.pixel_limit_var.get())
+        
+        if self.control_tab_obj:
+            self.data_manager.update_preference('pixel_limit', self.control_tab_obj.pixel_limit_var.get())
         
         # Save color settings from colors tab
         if self.colors_tab_obj:
@@ -82,167 +85,29 @@ class PlaceBotGUI:
         notebook = ttk.Notebook(self.root)
         notebook.pack(fill='both', expand=True, padx=10, pady=10)
         
-        # Create setup tab using the new class
+        # Create all tabs using the new classes
         self.setup_tab_obj = SetupTab(notebook, self)
-        notebook.add(self.setup_tab_obj.frame, text="Setup")
-        
-        # Create colors tab using the new class
         self.colors_tab_obj = ColorsTab(notebook, self)
+        self.preview_tab_obj = PreviewTab(notebook, self)
+        self.control_tab_obj = ControlTab(notebook, self)
+        
+        notebook.add(self.setup_tab_obj.frame, text="Setup")
         notebook.add(self.colors_tab_obj.frame, text="Color Control")
-        
-        # Create other tabs (keep existing for now)
-        self.preview_tab = ttk.Frame(notebook)
-        self.control_tab = ttk.Frame(notebook)
-        
-        notebook.add(self.preview_tab, text="Preview & Debug")
-        notebook.add(self.control_tab, text="Bot Control")
-        
-        # Create tab content
-        self._create_preview_tab()
-        self._create_control_tab()
+        notebook.add(self.preview_tab_obj.frame, text="Preview & Debug")
+        notebook.add(self.control_tab_obj.frame, text="Bot Control")
 
-    # Remove these methods (now in ColorsTab):
-    # - _create_colors_tab()
-    # - _create_color_widgets()
-    # - _toggle_bought_status()
-    # - _update_color_label()
-    # - _enable_all_colors()
-    # - _disable_all_colors()
-    # - _enable_only_free()
-    # - _enable_available_colors()
-
-    def _create_preview_tab(self):
-        """Preview tab for showing debug images and analysis results"""
-        # Image display
-        image_frame = ttk.LabelFrame(self.preview_tab, text="Debug Images", padding=10)
-        image_frame.pack(fill='both', expand=True, padx=10, pady=5)
-        
-        # Image selection
-        img_select_frame = ttk.Frame(image_frame)
-        img_select_frame.pack(fill='x', pady=5)
-        
-        self.image_var = tk.StringVar()
-        image_combo = ttk.Combobox(img_select_frame, textvariable=self.image_var,
-                                  values=["Size Estimation", "Palette Detection"],
-                                  state="readonly")
-        image_combo.pack(side='left', padx=5)
-        image_combo.bind('<<ComboboxSelected>>', self._load_debug_image)
-        
-        ttk.Button(img_select_frame, text="Refresh", 
-                  command=self._refresh_debug_images).pack(side='left', padx=5)
-        
-        self.image_label = ttk.Label(image_frame, text="No image selected")
-        self.image_label.pack(expand=True)
-        
-        # Statistics
-        stats_frame = ttk.LabelFrame(self.preview_tab, text="Analysis Results", padding=10)
-        stats_frame.pack(fill='x', padx=10, pady=5)
-        
-        self.stats_text = tk.Text(stats_frame, height=8, state='disabled')
-        stats_scrollbar = ttk.Scrollbar(stats_frame, command=self.stats_text.yview)
-        self.stats_text.config(yscrollcommand=stats_scrollbar.set)
-        
-        self.stats_text.pack(side='left', fill='both', expand=True)
-        stats_scrollbar.pack(side='right', fill='y')
-
-    def _create_control_tab(self):
-        """Control tab for running the bot"""
-        # Status
-        status_frame = ttk.LabelFrame(self.control_tab, text="Status", padding=10)
-        status_frame.pack(fill='x', padx=10, pady=5)
-        
-        self.status_label = ttk.Label(status_frame, text="Ready", font=('Arial', 12, 'bold'))
-        self.status_label.pack(pady=5)
-        
-        self.progress_var = tk.DoubleVar()
-        self.progress_bar = ttk.Progressbar(status_frame, variable=self.progress_var, maximum=100)
-        self.progress_bar.pack(fill='x', pady=5)
-        
-        # Control buttons
-        button_frame = ttk.Frame(status_frame)
-        button_frame.pack(pady=10)
-        
-        self.start_btn = ttk.Button(button_frame, text="Start Painting", 
-                                   command=self._start_bot, state='disabled')
-        self.start_btn.pack(side='left', padx=5)
-        
-        self.stop_btn = ttk.Button(button_frame, text="Stop", 
-                                  command=self._stop_bot, state='disabled')
-        self.stop_btn.pack(side='left', padx=5)
-        
-        # Bot Settings
-        self._create_bot_settings()
-        
-        # Log
-        log_frame = ttk.LabelFrame(self.control_tab, text="Log", padding=10)
-        log_frame.pack(fill='both', expand=True, padx=10, pady=5)
-        
-        self.log_text = tk.Text(log_frame, state='disabled')
-        log_scrollbar = ttk.Scrollbar(log_frame, command=self.log_text.yview)
-        self.log_text.config(yscrollcommand=log_scrollbar.set)
-        
-        self.log_text.pack(side='left', fill='both', expand=True)
-        log_scrollbar.pack(side='right', fill='y')
-
-    def _create_bot_settings(self):
-        """Create bot settings frame"""
-        bot_settings_frame = ttk.LabelFrame(self.control_tab, text="Bot Settings", padding=10)
-        bot_settings_frame.pack(fill='x', padx=10, pady=5)
-        
-        # Pixel limit setting
-        limit_frame = ttk.Frame(bot_settings_frame)
-        limit_frame.pack(fill='x', pady=5)
-        
-        ttk.Label(limit_frame, text="Pixel Limit (stop after painting):").pack(side='left')
-        
-        saved_pixel_limit = self.data_manager.user_settings['preferences'].get('pixel_limit', 50)
-        self.pixel_limit_var = tk.IntVar(value=saved_pixel_limit)
-        
-        self.pixel_limit_entry = ttk.Entry(limit_frame, textvariable=self.pixel_limit_var, width=8)
-        self.pixel_limit_entry.pack(side='right', padx=(5, 0))
-        self.pixel_limit_entry.bind('<KeyRelease>', self._on_pixel_limit_entry_change)
-        self.pixel_limit_entry.bind('<FocusOut>', self._on_pixel_limit_entry_change)
-        
-        ttk.Label(limit_frame, text="pixels").pack(side='right', padx=(5, 5))
-        
-        # Pixel limit slider
-        slider_frame = ttk.Frame(bot_settings_frame)
-        slider_frame.pack(fill='x', pady=2)
-        
-        ttk.Label(slider_frame, text="Quick Select:").pack(side='left')
-        self.pixel_limit_scale = ttk.Scale(slider_frame, from_=1, to=1000, 
-                                          variable=self.pixel_limit_var, orient='horizontal',
-                                          command=self._update_pixel_limit_from_slider)
-        self.pixel_limit_scale.pack(side='right', fill='x', expand=True, padx=(10, 0))
-
-    def _update_pixel_limit_from_slider(self, value):
-        """Update pixel limit when slider changes"""
-        new_value = int(float(value))
-        self.pixel_limit_var.set(new_value)
-        self.save_user_settings()
-
-    def _on_pixel_limit_entry_change(self, event=None):
-        """Handle manual entry changes for pixel limit"""
-        try:
-            new_value = self.pixel_limit_var.get()
-            new_value = max(1, min(1000, new_value))  # Clamp to valid range
-            self.pixel_limit_var.set(new_value)
-            self.pixel_limit_scale.set(new_value)
-            self.save_user_settings()
-        except tk.TclError:
-            pass  # Invalid input, ignore
-
-    # Remove the entire _create_setup_tab method (and all its helper methods):
-    # - _create_setup_tab()
-    # - _create_settings_frame()
-    # - _update_tolerance_label()
-    # - _update_delay_label()
-    # - _select_canvas_region()
-    # - _select_palette_region() 
-    # - _on_canvas_region_selected()
-    # - _on_palette_region_selected()
-    # - _check_ready_for_analysis()
-    # - _analyze_regions()
+    # Remove these methods (now in respective tab classes):
+    # - _create_preview_tab()
+    # - _create_control_tab()
+    # - _create_bot_settings()
+    # - _update_pixel_limit_from_slider()
+    # - _on_pixel_limit_entry_change()
+    # - _start_bot()
+    # - _stop_bot()
+    # - _log_message()
+    # - _load_debug_image()
+    # - _refresh_debug_images()
+    # - _update_stats()
 
     # ==================== EVENT HANDLERS ====================
     
@@ -350,69 +215,9 @@ class PlaceBotGUI:
     # ==================== UI HELPERS ====================
     
     def _log_message(self, message):
-        """Add message to log"""
-        self.log_text.config(state='normal')
-        self.log_text.insert(tk.END, f"{message}\n")
-        self.log_text.see(tk.END)
-        self.log_text.config(state='disabled')
-    
-    def _load_debug_image(self, event=None):
-        """Load and display debug image"""
-        image_type = self.image_var.get()
-        filename_map = {
-            "Size Estimation": "debug_size_estimation.png",
-            "Palette Detection": "debug_palette.png"
-        }
-        
-        filename = filename_map.get(image_type)
-        if filename and os.path.exists(filename):
-            try:
-                img = Image.open(filename)
-                img.thumbnail((600, 400), Image.Resampling.LANCZOS)
-                photo = ImageTk.PhotoImage(img)
-                self.image_label.config(image=photo, text="")
-                self.image_label.image = photo
-            except Exception as e:
-                self.image_label.config(text=f"Error loading image: {e}")
-        else:
-            self.image_label.config(text="Image not found. Run analysis first.")
-    
-    def _refresh_debug_images(self):
-        """Refresh debug image list"""
-        self._load_debug_image()
-    
-    def _update_stats(self):
-        """Update statistics display"""
-        if not self.data_manager.has_analysis_data():
-            return
-        
-        # Get tolerance and delay from setup tab
-        tolerance = self.setup_tab_obj.tolerance_var.get() if self.setup_tab_obj else 5
-        delay = self.setup_tab_obj.delay_var.get() if self.setup_tab_obj else 20
-        
-        # Get enabled colors count from colors tab
-        enabled_count = len(self.colors_tab_obj.color_vars) if self.colors_tab_obj else 0
-        total_count = len(self.data_manager.color_palette)
-        
-        stats = f"""Analysis Results:
-        
-Pixel Size: {self.data_manager.pixel_size}x{self.data_manager.pixel_size}
-Total Pixels Detected: {len(self.data_manager.pixel_map)}
-Colors Found in Palette: {len(self.data_manager.color_position_map)}
-
-Enabled Colors: {enabled_count}
-Total Colors: {total_count}
-
-Settings:
-Color Tolerance: {tolerance}
-Click Delay: {delay}ms
-Pixel Limit: {self.pixel_limit_var.get()}
-"""
-        
-        self.stats_text.config(state='normal')
-        self.stats_text.delete(1.0, tk.END)
-        self.stats_text.insert(1.0, stats)
-        self.stats_text.config(state='disabled')
+        """Delegate to control tab"""
+        if self.control_tab_obj:
+            self.control_tab_obj.log_message(message)
 
     # ==================== MESSAGE PROCESSING ====================
     
@@ -427,8 +232,8 @@ Pixel Limit: {self.pixel_limit_var.get()}
                 
                 elif message['type'] == 'analysis_complete':
                     self.setup_tab_obj.on_analysis_complete(message)
-                    self.start_btn.config(state='normal')
-                    self._update_stats()
+                    self.control_tab_obj.enable_start_button()
+                    self.preview_tab_obj.update_stats()
                     self._log_message(
                         f"Analysis completed successfully. Found {message['pixel_count']} pixels "
                         f"and {message['colors_found']} colors."
@@ -439,29 +244,15 @@ Pixel Limit: {self.pixel_limit_var.get()}
                     self._log_message(f"Analysis failed: {message['error']}")
                     
                 elif message['type'] == 'progress':
-                    self.progress_var.set(message['progress'])
-                    self.status_label.config(text=message['status'])
+                    self.control_tab_obj.update_progress(message['progress'], message['status'])
                     
                 elif message['type'] == 'bot_complete':
-                    self.is_running = False
-                    self.start_btn.config(state='normal')
-                    self.stop_btn.config(state='disabled')
                     total_painted = message.get('total_painted', 0)
                     limit_reached = message.get('limit_reached', False)
-                    
-                    if limit_reached:
-                        self.status_label.config(text=f"Pixel limit reached! ({total_painted} pixels)")
-                        self._log_message(f"Bot stopped - pixel limit reached! Total pixels painted: {total_painted}")
-                    else:
-                        self.status_label.config(text=f"Painting complete! ({total_painted} pixels)")
-                        self._log_message(f"Painting completed successfully! Total pixels painted: {total_painted}")
+                    self.control_tab_obj.on_bot_complete(total_painted, limit_reached)
                     
                 elif message['type'] == 'bot_error':
-                    self.is_running = False
-                    self.start_btn.config(state='normal')
-                    self.stop_btn.config(state='disabled')
-                    self.status_label.config(text=f"Error: {message['error']}")
-                    self._log_message(f"Bot error: {message['error']}")
+                    self.control_tab_obj.on_bot_error(message['error'])
                 
         except queue.Empty:
             pass
