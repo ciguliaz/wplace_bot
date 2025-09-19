@@ -10,16 +10,9 @@ This tool is intended for **personal use and experimentation** on wplace.live. U
 
 **Ban Status**: 0 reports ✅
 
-## Features
-
-- 🎨 **Smart Color Detection** - Automatically detects available colors from palette
-- 🖱️ **Visual Region Selection** - Drag-to-select canvas and palette areas
-- ⚙️ **Customizable Settings** - Adjustable tolerance, delays, and pixel limits
-- 🎯 **Precision Painting** - Finds and paints only pixels that need changes
-- 📊 **Real-time Monitoring** - Progress tracking and debug visualization
-- 💾 **Persistent Settings** - Saves your preferences and region selections
-
 ## 🚀 Quick Start
+
+**Requirements**: wplace.live, Blue Marble setup.
 
 ### Option 1: From Release (Recommended)
 
@@ -48,6 +41,15 @@ This tool is intended for **personal use and experimentation** on wplace.live. U
    ```bash
    python app.py
    ```
+
+## Features
+
+- 🎨 **Smart Color Detection** - Automatically detects available colors from palette
+- 🖱️ **Visual Region Selection** - Drag-to-select canvas and palette areas
+- ⚙️ **Customizable Settings** - Adjustable tolerance, delays, and pixel limits
+- 🎯 **Precision Painting** - Finds and paints only pixels that need changes
+- 📊 **Real-time Monitoring** - Progress tracking and debug visualization
+- 💾 **Persistent Settings** - Saves your preferences and region selections
 
 ## 📖 Usage Guide
 
