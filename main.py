@@ -10,9 +10,10 @@ import json
 import os
 
 
-def get_screen(region=None):
-    screenshot = pyautogui.screenshot(region=region)
-    return np.array(screenshot)
+# MOVED TO core/screen_capture.py
+# def get_screen(region=None):
+#     screenshot = pyautogui.screenshot(region=region)
+#     return np.array(screenshot)
 
 
 def select_region():
@@ -441,6 +442,7 @@ def main():
     palette_region = select_palette_region()
 
     # Take screenshots for analysis
+    from core import get_screen
     palette_img_rgb = get_screen(palette_region)
     canvas_img_rgb = get_screen(canvas_region)
 
