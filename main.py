@@ -72,41 +72,8 @@ def find_color_positions(img, target_color, tolerance=1, grid_size=1000):
     return matches
 
 
-def detect_palette_colors(palette_img_rgb, palette_region, known_colors, tolerance=3):
-    """
-    Detects color swatches by searching for each known color individually.
-    Expects an RGB image.
-    Returns a dictionary mapping color tuple -> screen coordinates.
-    """
-    color_map = {}
-    # Convert the input RGB image to BGR for OpenCV processing
-    palette_img_bgr = cv2.cvtColor(palette_img_rgb, cv2.COLOR_RGB2BGR)
-
-    for color_data in known_colors:
-        target_rgb = tuple(color_data["rgb"])
-        target_bgr = target_rgb[::-1]
-
-        lower_bound = np.array([max(0, c - tolerance) for c in target_bgr])
-        upper_bound = np.array([min(255, c + tolerance) for c in target_bgr])
-
-        # Use the BGR image for color masking
-        mask = cv2.inRange(palette_img_bgr, lower_bound, upper_bound)
-
-        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-        if contours:
-            largest_contour = max(contours, key=cv2.contourArea)
-            if cv2.contourArea(largest_contour) > 100:  # Filter noise
-                M = cv2.moments(largest_contour)
-                if M["m00"] != 0:
-                    cx = int(M["m10"] / M["m00"])
-                    cy = int(M["m01"] / M["m00"])
-
-                    screen_x = palette_region[0] + cx
-                    screen_y = palette_region[1] + cy
-                    color_map[target_rgb] = (screen_x, screen_y)
-
-    return color_map
+# MOVED TO core/color_detection.py
+# def detect_palette_colors(palette_img_rgb, palette_region, known_colors, tolerance=3):
 
 
 # MOVED TO core/image_analysis.py
@@ -360,7 +327,7 @@ def main():
     palette_region = select_palette_region()
 
     # Take screenshots for analysis
-    from core import get_screen, estimate_pixel_size
+    from core import get_screen, estimate_pixel_size, detect_palette_colors
     palette_img_rgb = get_screen(palette_region)
     canvas_img_rgb = get_screen(canvas_region)
 

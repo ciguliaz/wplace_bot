@@ -5,5 +5,6 @@ from .analysis_worker import AnalysisWorker
 from .bot_worker import BotWorker
 from .screen_capture import get_screen
 from .image_analysis import estimate_pixel_size
+from .color_detection import detect_palette_colors
 
-__all__ = ['DataManager', 'AnalysisWorker', 'BotWorker', 'get_screen', 'estimate_pixel_size']
+__all__ = ['DataManager', 'AnalysisWorker', 'BotWorker', 'get_screen', 'estimate_pixel_size', 'detect_palette_colors']
