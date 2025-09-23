@@ -131,11 +131,11 @@ class ControlTab:
         self.log_message("Starting painting bot...")
         
         # Get enabled colors and settings
-        enabled_colors = self.main_window._get_enabled_colors()
+        enabled_colors = self.main_window.get_enabled_colors()
         settings = {
             'pixel_limit': self.pixel_limit_var.get(),
-            'tolerance': self.main_window.setup_tab_obj.tolerance_var.get(),
-            'delay': self.main_window.setup_tab_obj.delay_var.get()
+            'tolerance': self.main_window.setup_tab.tolerance_var.get(),
+            'delay': self.main_window.setup_tab.delay_var.get()
         }
         
         # Use the bot worker

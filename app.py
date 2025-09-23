@@ -25,10 +25,10 @@ class PlaceBotGUI:
         self.is_running = False
         
         # Tab references
-        self.setup_tab_obj = None
-        self.colors_tab_obj = None
-        self.control_tab_obj = None
-        self.preview_tab_obj = None
+        self.setup_tab = None
+        self.colors_tab = None
+        self.control_tab = None
+        self.preview_tab = None
         
         # Thread communication
         self.message_queue = queue.Queue()
@@ -44,87 +44,95 @@ class PlaceBotGUI:
         notebook.pack(fill='both', expand=True, padx=10, pady=10)
         
         # Create all tabs using the new classes
-        self.setup_tab_obj = SetupTab(notebook, self)
-        self.colors_tab_obj = ColorsTab(notebook, self)
-        self.preview_tab_obj = PreviewTab(notebook, self)
-        self.control_tab_obj = ControlTab(notebook, self)
+        self.setup_tab = SetupTab(notebook, self)
+        self.colors_tab = ColorsTab(notebook, self)
+        self.preview_tab = PreviewTab(notebook, self)
+        self.control_tab = ControlTab(notebook, self)
         
-        notebook.add(self.setup_tab_obj.frame, text="Setup")
-        notebook.add(self.colors_tab_obj.frame, text="Color Control")
-        notebook.add(self.preview_tab_obj.frame, text="Preview & Debug")
-        notebook.add(self.control_tab_obj.frame, text="Bot Control")
+        notebook.add(self.setup_tab.frame, text="Setup")
+        notebook.add(self.colors_tab.frame, text="Color Control")
+        notebook.add(self.preview_tab.frame, text="Preview & Debug")
+        notebook.add(self.control_tab.frame, text="Bot Control")
 
     def save_user_settings(self):
         """Save user settings including UI state"""
         # Update preferences from UI
-        if self.setup_tab_obj:
-            self.data_manager.update_preference('color_tolerance', self.setup_tab_obj.tolerance_var.get())
-            self.data_manager.update_preference('click_delay', self.setup_tab_obj.delay_var.get())
+        if self.setup_tab:
+            self.data_manager.update_preference('color_tolerance', self.setup_tab.tolerance_var.get())
+            self.data_manager.update_preference('click_delay', self.setup_tab.delay_var.get())
         
-        if self.control_tab_obj:
-            self.data_manager.update_preference('pixel_limit', self.control_tab_obj.pixel_limit_var.get())
+        if self.control_tab:
+            self.data_manager.update_preference('pixel_limit', self.control_tab.pixel_limit_var.get())
         
         # Save color settings from colors tab
-        if self.colors_tab_obj:
+        if self.colors_tab:
             for color in self.data_manager.color_palette:
                 color_id = str(color['id'])
                 
                 # Save enabled status
-                if color['name'] in self.colors_tab_obj.color_vars:
-                    self.data_manager.set_color_setting(color_id, 'enabled', self.colors_tab_obj.color_vars[color['name']].get())
+                if color['name'] in self.colors_tab.color_vars:
+                    self.data_manager.set_color_setting(color_id, 'enabled', self.colors_tab.color_vars[color['name']].get())
                 
                 # Save bought status (only for premium colors)
-                if color.get('premium', False) and color['name'] in self.colors_tab_obj.bought_vars:
-                    self.data_manager.set_color_setting(color_id, 'bought', self.colors_tab_obj.bought_vars[color['name']].get())
+                if color.get('premium', False) and color['name'] in self.colors_tab.bought_vars:
+                    self.data_manager.set_color_setting(color_id, 'bought', self.colors_tab.bought_vars[color['name']].get())
 
     def load_saved_regions(self):
         """Load and display saved regions - delegated to setup tab"""
-        if self.setup_tab_obj:
-            self.setup_tab_obj._load_saved_regions()
+        if self.setup_tab:
+            self.setup_tab._load_saved_regions()
 
-    def _get_enabled_colors(self):
+    def get_enabled_colors(self):
         """Get list of enabled colors from colors tab"""
-        if self.colors_tab_obj:
-            return self.colors_tab_obj.get_enabled_colors()
+        if self.colors_tab:
+            return self.colors_tab.get_enabled_colors()
         return []
     
-    def _log_message(self, message):
+    def log_message(self, message):
         """Delegate to control tab"""
-        if self.control_tab_obj:
-            self.control_tab_obj.log_message(message)
+        if self.control_tab:
+            self.control_tab.log_message(message)
 
     def process_queue(self):
         """Process messages from worker threads"""
         try:
-            while True:
+            # Process max 10 messages per call to prevent GUI blocking
+            for _ in range(10):
                 message = self.message_queue.get_nowait()
                 
                 if message['type'] == 'log':
-                    self._log_message(message['message'])
+                    self.log_message(message['message'])
                 
                 elif message['type'] == 'analysis_complete':
-                    self.setup_tab_obj.on_analysis_complete(message)
-                    self.control_tab_obj.enable_start_button()
-                    self.preview_tab_obj.update_stats()
-                    self._log_message(
+                    if self.setup_tab:
+                        self.setup_tab.on_analysis_complete(message)
+                    if self.control_tab:
+                        self.control_tab.enable_start_button()
+                    if self.preview_tab:
+                        self.preview_tab.update_stats()
+                    self.log_message(
                         f"Analysis completed successfully. Found {message['pixel_count']} pixels "
                         f"and {message['colors_found']} colors."
                     )
                     
                 elif message['type'] == 'analysis_error':
-                    self.setup_tab_obj.on_analysis_error(message)
-                    self._log_message(f"Analysis failed: {message['error']}")
+                    if self.setup_tab:
+                        self.setup_tab.on_analysis_error(message)
+                    self.log_message(f"Analysis failed: {message['error']}")
                     
                 elif message['type'] == 'progress':
-                    self.control_tab_obj.update_progress(message['progress'], message['status'])
+                    if self.control_tab:
+                        self.control_tab.update_progress(message['progress'], message['status'])
                     
                 elif message['type'] == 'bot_complete':
                     total_painted = message.get('total_painted', 0)
                     limit_reached = message.get('limit_reached', False)
-                    self.control_tab_obj.on_bot_complete(total_painted, limit_reached)
+                    if self.control_tab:
+                        self.control_tab.on_bot_complete(total_painted, limit_reached)
                     
                 elif message['type'] == 'bot_error':
-                    self.control_tab_obj.on_bot_error(message['error'])
+                    if self.control_tab:
+                        self.control_tab.on_bot_error(message['error'])
                 
         except queue.Empty:
             pass
@@ -134,9 +142,15 @@ class PlaceBotGUI:
 
 def main():
     """Main entry point"""
-    root = tk.Tk()
-    app = PlaceBotGUI(root)
-    root.mainloop()
+    try:
+        root = tk.Tk()
+        app = PlaceBotGUI(root)
+        root.mainloop()
+    except Exception as e:
+        print(f"Failed to start GUI application: {e}")
+        print("Please ensure tkinter is properly installed and display is available.")
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
