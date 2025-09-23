@@ -109,90 +109,8 @@ def detect_palette_colors(palette_img_rgb, palette_region, known_colors, toleran
     return color_map
 
 
-def estimate_pixel_size(img, min_size=5, max_size=50, debug_filename="debug_size_estimation.png"):
-    """
-    Estimates the grid pixel size and saves a debug image showing the process.
-    """
-    # Create a copy for drawing
-    debug_img = img.copy()
-
-    # Convert to grayscale and find edges with very sensitive settings
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    edges = cv2.Canny(gray, 0, 0, apertureSize=3)
-    contours, _ = cv2.findContours(edges, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-
-    # Collect all valid square sizes
-    square_sizes = []
-    square_contours = []
-
-    for cnt in contours:
-        x, y, w, h = cv2.boundingRect(cnt)
-
-        is_square_like = 0.8 <= w / h <= 1.2
-        is_right_size = min_size < w < max_size and min_size < h < max_size
-
-        if is_square_like and is_right_size:
-            square_sizes.append(w)
-            square_contours.append((cnt, w, h))
-
-    if len(square_sizes) < 10:
-        print("Warning: Could not find enough squares. Falling back to default (22).")
-        return 22
-
-    sorted_sizes = sorted(square_sizes)
-
-    # Find the smallest group (these should be preview squares)
-    # Take the first 25% of sizes as potential previews
-    preview_count = max(1, len(sorted_sizes) // 4)
-    potential_previews = sorted_sizes[:preview_count]
-
-    # Get median size of the smallest squares (preview squares)
-    preview_median = statistics.median(potential_previews)
-
-    # Calculate expected pixel size (preview * 3)
-    expected_pixel_size = preview_median * 3
-
-    # Set tolerance for what we consider valid single pixels
-    pixel_min = expected_pixel_size * 0.8
-    pixel_max = expected_pixel_size * 1.2
-
-    # print(f"Debug: Preview median={preview_median}, Expected pixel={expected_pixel_size}")
-    # print(f"Debug: Accepting pixels between {pixel_min} and {pixel_max}")
-
-    pixel_sizes = []
-    preview_sizes = []
-    filtered_out = 0
-
-    for cnt, w, h in square_contours:
-        x, y, _, _ = cv2.boundingRect(cnt)
-
-        if w <= preview_median * 1.5:  # Definitely a preview
-            cv2.rectangle(debug_img, (x, y), (x + w, y + h), (0, 255, 0), 1)  # Green
-            preview_sizes.append(w)
-        elif pixel_min <= w <= pixel_max:  # Valid single pixel
-            cv2.rectangle(debug_img, (x, y), (x + w, y + h), (0, 0, 255), 1)  # Red
-            pixel_sizes.append(w)
-        else:  # Too big - probably 2x2, 3x3, etc.
-            cv2.rectangle(
-                debug_img, (x, y), (x + w, y + h), (128, 128, 128), 1
-            )  # Gray (filtered out)
-            filtered_out += 1
-
-    if not pixel_sizes:
-        print("Warning: Could not find valid single pixel squares. Using calculated size.")
-        estimated_size = round(expected_pixel_size)
-    else:
-        estimated_size = round(statistics.median(pixel_sizes))
-
-    # print(f"Debug: Found {len(preview_sizes)} previews, {len(pixel_sizes)} pixels, {filtered_out} filtered out")
-
-    # # Add text to the debug image
-    # text = f"Estimated Pixel Size: {estimated_size}"
-    # cv2.putText(debug_img, text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-    cv2.imwrite(debug_filename, debug_img)
-    print(f"Size estimation debug image saved: {debug_filename}")
-
-    return estimated_size
+# MOVED TO core/image_analysis.py
+# def estimate_pixel_size(img, min_size=5, max_size=50, debug_filename="debug_size_estimation.png"):
 
 
 def find_pixels_to_paint(img, target_color_bgr, pixel_size, tolerance=1, debug_filename=None):
@@ -442,7 +360,7 @@ def main():
     palette_region = select_palette_region()
 
     # Take screenshots for analysis
-    from core import get_screen
+    from core import get_screen, estimate_pixel_size
     palette_img_rgb = get_screen(palette_region)
     canvas_img_rgb = get_screen(canvas_region)
 
