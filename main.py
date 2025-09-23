@@ -96,76 +96,12 @@ def find_color_positions(img, target_color, tolerance=1, grid_size=1000):
 # def build_pixel_map(img, pixel_size, preview_positions):
 
 
-def get_preview_positions_from_estimation(img, pixel_size):
-    """
-    Extract all preview positions from the size estimation process.
-    """
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    edges = cv2.Canny(gray, 0, 0, apertureSize=3)
-    contours, _ = cv2.findContours(edges, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-
-    preview_positions = []
-
-    # Use same logic as estimate_pixel_size to find previews
-    square_sizes = []
-    square_contours = []
-
-    for cnt in contours:
-        x, y, w, h = cv2.boundingRect(cnt)
-
-        is_square_like = 0.8 <= w / h <= 1.2
-        is_right_size = 5 < w < 50 and 5 < h < 50
-
-        if is_square_like and is_right_size:
-            square_sizes.append(w)
-            square_contours.append((cnt, w, h))
-
-    if len(square_sizes) < 10:
-        return []
-
-    sorted_sizes = sorted(square_sizes)
-    preview_count = max(1, len(sorted_sizes) // 4)
-    potential_previews = sorted_sizes[:preview_count]
-    preview_median = statistics.median(potential_previews)
-
-    for cnt, w, h in square_contours:
-        if w <= preview_median * 1.5:  # This is a preview
-            x, y, _, _ = cv2.boundingRect(cnt)
-            center_x = x + w // 2
-            center_y = y + h // 2
-            preview_positions.append((center_x, center_y))
-
-    return preview_positions
+# MOVED TO core/image_analysis.py
+# def get_preview_positions_from_estimation(img, pixel_size):
 
 
-def find_pixels_to_paint_from_map(pixel_map, target_bgr, tolerance=5):
-    """
-    Uses the pre-built pixel map to find pixels that need painting.
-    Only paints pixels where:
-    1. The preview shows the target color (indicating intention to paint this color)
-    2. The actual pixel container is NOT yet the target color
-    """
-    matches = []
-
-    for (preview_x, preview_y), colors in pixel_map.items():
-        preview_color = colors["preview_color"]
-        pixel_color = colors["pixel_color"]
-
-        # Check if preview shows the target color (user wants to paint this color here)
-        preview_matches_target = all(
-            abs(int(preview_color[i]) - target_bgr[i]) <= tolerance for i in range(3)
-        )
-
-        # Check if pixel is already the correct color
-        pixel_already_correct = all(
-            abs(int(pixel_color[i]) - target_bgr[i]) <= tolerance for i in range(3)
-        )
-
-        # Only paint if preview shows target color but pixel isn't painted yet
-        if preview_matches_target and not pixel_already_correct:
-            matches.append((preview_x, preview_y))
-
-    return matches
+# MOVED TO core/pixel_mapping.py
+# def find_pixels_to_paint_from_map(pixel_map, target_bgr, tolerance=5):
 
 
 def load_color_palette():
@@ -210,7 +146,7 @@ def main():
     palette_region = select_palette_region()
 
     # Take screenshots for analysis
-    from core import get_screen, estimate_pixel_size, detect_palette_colors, save_palette_debug_image, auto_click_positions
+    from core import get_screen, estimate_pixel_size, detect_palette_colors, save_palette_debug_image, auto_click_positions, build_pixel_map, get_preview_positions_from_estimation
     palette_img_rgb = get_screen(palette_region)
     canvas_img_rgb = get_screen(canvas_region)
 

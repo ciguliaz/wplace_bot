@@ -1,7 +1,7 @@
 import threading
 import time
 import pyautogui
-from main import find_pixels_to_paint_from_map
+from .pixel_mapping import find_pixels_to_paint_from_map
 
 class BotWorker:
     """Handles bot painting logic in separate thread"""

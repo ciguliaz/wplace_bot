@@ -131,3 +131,45 @@ def build_pixel_map(img, pixel_size, preview_positions):
             }
 
     return pixel_map
+
+
+def get_preview_positions_from_estimation(img, pixel_size):
+    """
+    Extract all preview positions from the size estimation process.
+    """
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    edges = cv2.Canny(gray, 0, 0, apertureSize=3)
+    contours, _ = cv2.findContours(edges, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+    preview_positions = []
+
+    # Use same logic as estimate_pixel_size to find previews
+    square_sizes = []
+    square_contours = []
+
+    for cnt in contours:
+        x, y, w, h = cv2.boundingRect(cnt)
+
+        is_square_like = 0.8 <= w / h <= 1.2
+        is_right_size = 5 < w < 50 and 5 < h < 50
+
+        if is_square_like and is_right_size:
+            square_sizes.append(w)
+            square_contours.append((cnt, w, h))
+
+    if len(square_sizes) < 10:
+        return []
+
+    sorted_sizes = sorted(square_sizes)
+    preview_count = max(1, len(sorted_sizes) // 4)
+    potential_previews = sorted_sizes[:preview_count]
+    preview_median = statistics.median(potential_previews)
+
+    for cnt, w, h in square_contours:
+        if w <= preview_median * 1.5:  # This is a preview
+            x, y, _, _ = cv2.boundingRect(cnt)
+            center_x = x + w // 2
+            center_y = y + h // 2
+            preview_positions.append((center_x, center_y))
+
+    return preview_positions
