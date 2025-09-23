@@ -103,3 +103,31 @@ def find_pixels_to_paint(img, target_color_bgr, pixel_size, tolerance=1, debug_f
         print(f"Painting scan debug image saved: {debug_filename}")
 
     return matches
+
+
+def build_pixel_map(img, pixel_size, preview_positions):
+    """
+    Builds a map of all pixel positions with their preview and pixel colors.
+    Returns a dictionary: {(x, y): {'preview_color': bgr, 'pixel_color': bgr}}
+    """
+    pixel_map = {}
+
+    for preview_x, preview_y in preview_positions:
+        pixel_x = preview_x - pixel_size // 2
+        pixel_y = preview_y - pixel_size // 2
+
+        if (
+            pixel_y + 2 < img.shape[0] and pixel_x + 2 < img.shape[1]
+            and pixel_y >= 0 and pixel_x >= 0
+            and preview_y >= 0 and preview_x >= 0
+            and preview_y < img.shape[0] and preview_x < img.shape[1]
+        ):
+            preview_color = img[preview_y, preview_x]
+            pixel_color = img[pixel_y + 2, pixel_x + 2]
+
+            pixel_map[(preview_x, preview_y)] = {
+                "preview_color": tuple(preview_color),
+                "pixel_color": tuple(pixel_color),
+            }
+
+    return pixel_map
