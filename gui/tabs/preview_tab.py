@@ -92,9 +92,9 @@ class PreviewTab:
             return
         
         # Get settings from other tabs
-        setup_tab = self.main_window.setup_tab_obj
-        colors_tab = self.main_window.colors_tab_obj
-        control_tab = self.main_window.control_tab_obj
+        setup_tab = self.main_window.setup_tab
+        colors_tab = self.main_window.colors_tab
+        control_tab = self.main_window.control_tab
         
         tolerance = setup_tab.tolerance_var.get() if setup_tab else 5
         delay = setup_tab.delay_var.get() if setup_tab else 20

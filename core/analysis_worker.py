@@ -1,5 +1,6 @@
 import threading
 import cv2
+from .logger import get_logger
 
 class AnalysisWorker:
     """Handles analysis logic in separate thread"""
@@ -7,6 +8,7 @@ class AnalysisWorker:
     def __init__(self, data_manager):
         self.data_manager = data_manager
         self.thread = None
+        self.logger = get_logger()
     
     def start_analysis(self, message_queue):
         """Start analysis in a separate thread"""
@@ -20,8 +22,7 @@ class AnalysisWorker:
     def _analyze_worker(self, message_queue):
         """Worker function for analysis (runs in separate thread)"""
         try:
-            from main import (get_screen, estimate_pixel_size, get_preview_positions_from_estimation,
-                            build_pixel_map, detect_palette_colors, save_palette_debug_image)
+            from core import get_screen, estimate_pixel_size, detect_palette_colors, save_palette_debug_image, build_pixel_map, get_preview_positions_from_estimation
             
             # Take screenshots using data_manager regions
             palette_img_rgb = get_screen(self.data_manager.palette_region)
@@ -30,11 +31,17 @@ class AnalysisWorker:
             
             # Analyze
             pixel_size = estimate_pixel_size(canvas_img_bgr)
+            self.logger.debug(f"Estimated pixel size: {pixel_size}x{pixel_size}")
+            
             preview_positions = get_preview_positions_from_estimation(canvas_img_bgr, pixel_size)
             pixel_map = build_pixel_map(canvas_img_bgr, pixel_size, preview_positions)
+            self.logger.debug(f"Built pixel map with {len(pixel_map)} pixels")
+            
             color_position_map = detect_palette_colors(
                 palette_img_rgb, self.data_manager.palette_region, self.data_manager.color_palette
             )
+            self.logger.debug(f"Detected {len(color_position_map)} colors in palette")
+            
             save_palette_debug_image(palette_img_rgb, color_position_map, self.data_manager.palette_region)
             
             # Store results in data_manager

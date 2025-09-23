@@ -3,6 +3,7 @@
 *.jpeg
 *.gif
 *.spec
+*.log
 
 *.zip
 *.bat

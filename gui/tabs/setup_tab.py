@@ -140,7 +140,7 @@ class SetupTab:
             self.data_manager.set_canvas_region(region)
             self.canvas_status.config(text=f"Selected: {region}", foreground="green")
         else:
-            self.main_window._log_message("Canvas region selection cancelled")
+            self.main_window.log_message("Canvas region selection cancelled")
         self._check_ready_for_analysis()
     
     def _on_palette_region_selected(self, region):
@@ -150,7 +150,7 @@ class SetupTab:
             self.data_manager.set_palette_region(region)
             self.palette_status.config(text=f"Selected: {region}", foreground="green")
         else:
-            self.main_window._log_message("Palette region selection cancelled")
+            self.main_window.log_message("Palette region selection cancelled")
         self._check_ready_for_analysis()
     
     def _check_ready_for_analysis(self):
@@ -162,7 +162,7 @@ class SetupTab:
         """Run analysis in a separate thread"""
         self.analyze_btn.config(state='disabled', text="Analyzing...")
         self.analysis_status.config(text="Running analysis...")
-        self.main_window._log_message("Starting analysis...")
+        self.main_window.log_message("Starting analysis...")
         
         # Use the analysis worker
         self.analysis_worker.start_analysis(self.message_queue)
