@@ -2,6 +2,7 @@ import threading
 import time
 import pyautogui
 from .pixel_mapping import find_pixels_to_paint_from_map
+from .logger import get_logger
 
 class BotWorker:
     """Handles bot painting logic in separate thread"""
@@ -10,6 +11,7 @@ class BotWorker:
         self.data_manager = data_manager
         self.is_running = False
         self.thread = None
+        self.logger = get_logger()
     
     def start_bot(self, message_queue, enabled_colors, settings):
         """Start the painting bot"""
@@ -33,10 +35,7 @@ class BotWorker:
             tolerance = settings['tolerance']
             delay = settings['delay']
             
-            message_queue.put({
-                'type': 'log',
-                'message': f"Starting bot with pixel limit: {pixel_limit}"
-            })
+            self.logger.bot_start(pixel_limit)
             
             for color in enabled_colors:
                 if not self.is_running or total_pixels_painted >= pixel_limit:
@@ -76,11 +75,8 @@ class BotWorker:
         if len(positions) > remaining_pixels:
             positions = positions[:remaining_pixels]
         
-        message_queue.put({
-            'type': 'log',
-            'message': f"Painting {len(positions)} pixels with {color['name']} "
-                      f"(Total: {total_pixels_painted + len(positions)}/{pixel_limit})"
-        })
+        self.logger.debug(f"Painting {len(positions)} pixels with {color['name']} "
+                         f"(Total: {total_pixels_painted + len(positions)}/{pixel_limit})")
         
         # Click color in palette
         px, py = self.data_manager.color_position_map[target_rgb]
@@ -99,6 +95,7 @@ class BotWorker:
             # Update progress every 10 pixels
             if pos_i % 10 == 0 or pos_i == len(positions) - 1:
                 progress = (total_pixels_painted / pixel_limit) * 100
+                self.logger.bot_progress(total_pixels_painted, pixel_limit, color['name'])
                 message_queue.put({
                     'type': 'progress',
                     'progress': min(progress, 100),

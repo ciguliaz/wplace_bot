@@ -3,7 +3,7 @@ import tkinter as tk
 from tkinter import ttk
 
 # Import core components
-from core import DataManager, AnalysisWorker, BotWorker
+from core import DataManager, AnalysisWorker, BotWorker, get_logger
 
 # Import tab classes
 from gui.tabs import SetupTab, ColorsTab, ControlTab, PreviewTab
@@ -25,6 +25,8 @@ class PlaceBotGUI:
         self.data_manager = DataManager()
         self.analysis_worker = AnalysisWorker(self.data_manager)
         self.bot_worker = BotWorker(self.data_manager)
+        self.logger = get_logger()
+        self.logger.set_gui_callback(self._gui_log_callback)
         
         # State variables
         self.is_running = False
@@ -127,14 +129,18 @@ class PlaceBotGUI:
             return self.colors_tab.get_enabled_colors()
         return []
     
-    def log_message(self, message):
-        """Delegate to control tab"""
+    def _gui_log_callback(self, message):
+        """Callback for logger to display messages in GUI"""
         if self.control_tab:
             self.control_tab.log_message(message)
+    
+    def log_message(self, message):
+        """Log message through logger system"""
+        self.logger.info(message)
 
     def _handle_log_message(self, message):
         """Handle log message"""
-        self.log_message(message['message'])
+        self.logger.info(message['message'])
     
     def _handle_analysis_complete(self, message):
         """Handle analysis complete message"""
@@ -144,16 +150,13 @@ class PlaceBotGUI:
             self.control_tab.enable_start_button()
         if self.preview_tab:
             self.preview_tab.update_stats()
-        self.log_message(
-            f"Analysis completed successfully. Found {message['pixel_count']} pixels "
-            f"and {message['colors_found']} colors."
-        )
+        self.logger.analysis_complete(message['pixel_count'], message['colors_found'])
     
     def _handle_analysis_error(self, message):
         """Handle analysis error message"""
         if self.setup_tab:
             self.setup_tab.on_analysis_error(message)
-        self.log_message(f"Analysis failed: {message['error']}")
+        self.logger.analysis_error(message['error'])
     
     def _handle_progress(self, message):
         """Handle progress message"""
@@ -166,11 +169,13 @@ class PlaceBotGUI:
         limit_reached = message.get('limit_reached', False)
         if self.control_tab:
             self.control_tab.on_bot_complete(total_painted, limit_reached)
+        self.logger.bot_complete(total_painted, limit_reached)
     
     def _handle_bot_error(self, message):
         """Handle bot error message"""
         if self.control_tab:
             self.control_tab.on_bot_error(message['error'])
+        self.logger.bot_error(message['error'])
     
     def process_queue(self):
         """Process messages from worker threads"""
@@ -204,8 +209,9 @@ def main():
         app = PlaceBotGUI(root)
         root.mainloop()
     except Exception as e:
-        print(f"Failed to start GUI application: {e}")
-        print("Please ensure tkinter is properly installed and display is available.")
+        logger = get_logger()
+        logger.critical(f"Failed to start GUI application: {e}")
+        logger.error("Please ensure tkinter is properly installed and display is available.")
         return 1
     return 0
 
