@@ -34,3 +34,21 @@ def detect_palette_colors(palette_img_rgb, palette_region, known_colors, toleran
                     color_map[target_rgb] = (screen_x, screen_y)
 
     return color_map
+
+
+def save_palette_debug_image(palette_img_rgb, color_map, palette_region, filename="debug_palette.png"):
+    """Save debug image showing detected palette colors."""
+    debug_img = cv2.cvtColor(palette_img_rgb, cv2.COLOR_RGB2BGR)
+    box_size = 10
+    for color_rgb, screen_coords in color_map.items():
+        img_x = screen_coords[0] - palette_region[0]
+        img_y = screen_coords[1] - palette_region[1]
+        cv2.rectangle(
+            debug_img,
+            (img_x - box_size // 2, img_y - box_size // 2),
+            (img_x + box_size // 2, img_y + box_size // 2),
+            (0, 255, 0),
+            2,
+        )
+    cv2.imwrite(filename, debug_img)
+    print(f"Palette debug image saved: {filename}")

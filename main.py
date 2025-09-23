@@ -94,23 +94,8 @@ def auto_click_positions(positions, offset=(0, 0)):
         time.sleep(0.02)
 
 
-def save_palette_debug_image(palette_img_rgb, color_map, palette_region, filename="debug_palette.png"):
-    # Convert to BGR for OpenCV drawing
-    debug_img = cv2.cvtColor(palette_img_rgb, cv2.COLOR_RGB2BGR)
-    box_size = 10
-    for color_rgb, screen_coords in color_map.items():
-        img_x = screen_coords[0] - palette_region[0]
-        img_y = screen_coords[1] - palette_region[1]
-        # Draw a green square marker
-        cv2.rectangle(
-            debug_img,
-            (img_x - box_size // 2, img_y - box_size // 2),
-            (img_x + box_size // 2, img_y + box_size // 2),
-            (0, 255, 0),
-            2,
-        )
-    cv2.imwrite(filename, debug_img)
-    print(f"Palette debug image saved: {filename}")
+# MOVED TO core/color_detection.py
+# def save_palette_debug_image(palette_img_rgb, color_map, palette_region, filename="debug_palette.png"):
 
 
 def build_pixel_map(img, pixel_size, preview_positions):
@@ -258,7 +243,7 @@ def main():
     palette_region = select_palette_region()
 
     # Take screenshots for analysis
-    from core import get_screen, estimate_pixel_size, detect_palette_colors
+    from core import get_screen, estimate_pixel_size, detect_palette_colors, save_palette_debug_image
     palette_img_rgb = get_screen(palette_region)
     canvas_img_rgb = get_screen(canvas_region)
 

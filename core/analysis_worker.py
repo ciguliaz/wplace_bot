@@ -20,9 +20,9 @@ class AnalysisWorker:
     def _analyze_worker(self, message_queue):
         """Worker function for analysis (runs in separate thread)"""
         try:
-            from core import get_screen, estimate_pixel_size, detect_palette_colors
+            from core import get_screen, estimate_pixel_size, detect_palette_colors, save_palette_debug_image
             from main import (get_preview_positions_from_estimation,
-                            build_pixel_map, save_palette_debug_image)
+                            build_pixel_map)
             
             # Take screenshots using data_manager regions
             palette_img_rgb = get_screen(self.data_manager.palette_region)
