@@ -84,14 +84,8 @@ def find_color_positions(img, target_color, tolerance=1, grid_size=1000):
 # def find_pixels_to_paint(img, target_color_bgr, pixel_size, tolerance=1, debug_filename=None):
 
 
-def auto_click_positions(positions, offset=(0, 0)):
-    print("Press ESC to stop at any time.")
-    for x, y in positions:
-        if keyboard.is_pressed("esc"):
-            print("Stopped by user.")
-            break
-        pyautogui.click(x + offset[0], y + offset[1])
-        time.sleep(0.02)
+# MOVED TO core/automation.py
+# def auto_click_positions(positions, offset=(0, 0)):
 
 
 # MOVED TO core/color_detection.py
@@ -243,7 +237,7 @@ def main():
     palette_region = select_palette_region()
 
     # Take screenshots for analysis
-    from core import get_screen, estimate_pixel_size, detect_palette_colors, save_palette_debug_image
+    from core import get_screen, estimate_pixel_size, detect_palette_colors, save_palette_debug_image, auto_click_positions
     palette_img_rgb = get_screen(palette_region)
     canvas_img_rgb = get_screen(canvas_region)
 
