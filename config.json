@@ -1,0 +1,26 @@
+{
+  "ui": {
+    "theme": "clam",
+    "window_size": "800x800",
+    "remember_position": true,
+    "auto_save_interval": 30
+  },
+  "bot": {
+    "default_pixel_limit": 50,
+    "default_tolerance": 5,
+    "default_delay": 50,
+    "max_pixel_limit": 1000,
+    "safety_checks": true
+  },
+  "logging": {
+    "level": "INFO",
+    "max_log_files": 7,
+    "log_to_file": true,
+    "log_to_console": true
+  },
+  "analysis": {
+    "auto_refresh_interval": 0,
+    "save_debug_images": true,
+    "image_quality": "high"
+  }
+}

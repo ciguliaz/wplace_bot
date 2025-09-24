@@ -3,15 +3,17 @@ import tkinter as tk
 from tkinter import ttk
 
 # Import core components
-from core import DataManager, AnalysisWorker, BotWorker, get_logger
+from core import DataManager, AnalysisWorker, BotWorker, get_logger, get_config
 
 # Import tab classes
 from gui.tabs import SetupTab, ColorsTab, ControlTab, PreviewTab
 
+# Load configuration
+config = get_config()
+
 # Constants
 MAX_MESSAGES_PER_CYCLE = 10
 QUEUE_PROCESS_INTERVAL = 100  # milliseconds
-DEFAULT_WINDOW_SIZE = "800x800"
 
 class PlaceBotGUI:
     """Main GUI application for Place Bot"""
@@ -19,7 +21,14 @@ class PlaceBotGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Place Bot - Pixel Art Automation")
-        self.root.geometry(DEFAULT_WINDOW_SIZE)
+        self.root.geometry(config.get('ui.window_size', '800x800'))
+        self.root.minsize(600, 500)
+        
+        # Center window on screen
+        self._center_window()
+        
+        # Configure modern styling
+        self._setup_styling()
         
         # Initialize core components
         self.data_manager = DataManager()
@@ -44,7 +53,35 @@ class PlaceBotGUI:
         self.setup_ui()
         self.load_saved_regions()
         self._setup_cleanup()
+        self._setup_keyboard_shortcuts()
         self.process_queue()
+    
+    def _center_window(self):
+        """Center the window on screen"""
+        self.root.update_idletasks()
+        width = self.root.winfo_width()
+        height = self.root.winfo_height()
+        x = (self.root.winfo_screenwidth() // 2) - (width // 2)
+        y = (self.root.winfo_screenheight() // 2) - (height // 2)
+        self.root.geometry(f"{width}x{height}+{x}+{y}")
+    
+    def _setup_styling(self):
+        """Setup modern UI styling"""
+        style = ttk.Style()
+        
+        # Use default theme (cleaner appearance)
+        style.theme_use('default')
+        
+        # Custom colors
+        style.configure('Title.TLabel', font=('Arial', 12, 'bold'))
+        style.configure('Success.TLabel', foreground='green')
+        style.configure('Error.TLabel', foreground='red')
+        style.configure('Warning.TLabel', foreground='orange')
+    
+    def _setup_keyboard_shortcuts(self):
+        """Setup keyboard shortcuts"""
+        # Only Ctrl+S works reliably when app has focus
+        self.root.bind('<Control-s>', lambda e: self.save_user_settings())
     
     def _setup_cleanup(self):
         """Setup cleanup handlers"""
@@ -58,6 +95,7 @@ class PlaceBotGUI:
         
         # Save settings before closing
         self.save_user_settings()
+        config.save()
         
         # Close the application
         self.root.destroy()
@@ -78,9 +116,115 @@ class PlaceBotGUI:
     
     def setup_ui(self):
         """Create the main UI layout"""
-        notebook = ttk.Notebook(self.root)
-        notebook.pack(fill='both', expand=True, padx=10, pady=10)
+        # Main container
+        main_frame = ttk.Frame(self.root)
+        main_frame.pack(fill='both', expand=True, padx=10, pady=10)
+        
+        # Menu bar
+        self._create_menu_bar()
+        
+        # Notebook for tabs
+        notebook = ttk.Notebook(main_frame)
+        notebook.pack(fill='both', expand=True)
         self._create_tabs(notebook)
+        
+        # Status bar
+        self._create_status_bar(main_frame)
+    
+    def _create_status_bar(self, parent):
+        """Create status bar at bottom"""
+        self.status_frame = ttk.Frame(parent)
+        self.status_frame.pack(fill='x', pady=(5, 0))
+        
+        # Status label
+        self.status_label = ttk.Label(self.status_frame, text="Ready")
+        self.status_label.pack(side='left')
+        
+        # Mouse cancellation hint
+        mouse_hint = ttk.Label(self.status_frame, text="🖱️ Move mouse to cancel bot", 
+                              foreground='gray', font=('Arial', 8))
+        mouse_hint.pack(side='left', padx=(20, 0))
+        
+        # Version info
+        version_label = ttk.Label(self.status_frame, text="v1.0.0")
+        version_label.pack(side='right')
+        
+        # Separator
+        ttk.Separator(parent, orient='horizontal').pack(fill='x', pady=(2, 0))
+    
+    def _create_menu_bar(self):
+        """Create menu bar"""
+        menubar = tk.Menu(self.root)
+        self.root.config(menu=menubar)
+        
+        # File menu
+        file_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="File", menu=file_menu)
+        file_menu.add_command(label="Save Settings", command=self.save_user_settings, accelerator="Ctrl+S")
+        file_menu.add_separator()
+        file_menu.add_command(label="Exit", command=self._on_closing)
+        
+        # Tools menu
+        tools_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Tools", menu=tools_menu)
+        tools_menu.add_command(label="Open Log File", command=self._open_log_file)
+        
+        # Help menu
+        help_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Help", menu=help_menu)
+        help_menu.add_command(label="Keyboard Shortcuts", command=self._show_shortcuts)
+        help_menu.add_command(label="About", command=self._show_about)
+    
+    def _open_log_file(self):
+        """Open log file in default editor"""
+        import os
+        import subprocess
+        from datetime import datetime
+        
+        log_file = f"placebot_{datetime.now().strftime('%Y%m%d')}.log"
+        if os.path.exists(log_file):
+            try:
+                if os.name == 'nt':  # Windows
+                    os.startfile(log_file)
+                else:  # macOS and Linux
+                    subprocess.call(['open' if os.name == 'posix' else 'xdg-open', log_file])
+            except Exception as e:
+                self.logger.error(f"Could not open log file: {e}")
+        else:
+            self.update_status("Log file not found", 'warning')
+    
+    def _show_shortcuts(self):
+        """Show keyboard shortcuts dialog"""
+        from tkinter import messagebox
+        shortcuts = (
+            "Keyboard Shortcuts:\n\n"
+            "Ctrl+S - Save Settings\n\n"
+            "Mouse Movement Cancellation:\n\n"
+            "Move mouse to cancel bot while running"
+        )
+        messagebox.showinfo("Keyboard Shortcuts", shortcuts)
+    
+    def _show_about(self):
+        """Show about dialog"""
+        from tkinter import messagebox
+        about_text = (
+            "Place Bot v1.6.2\n\n"
+            "Pixel Art Automation Tool for Wplace.live\n\n"
+            "A Python GUI application for automating\n"
+            "pixel art creation on wplace.live canvases."
+        )
+        messagebox.showinfo("About Place Bot", about_text)
+    
+    def update_status(self, message, status_type='info'):
+        """Update status bar message"""
+        if hasattr(self, 'status_label'):
+            style_map = {
+                'info': 'TLabel',
+                'success': 'Success.TLabel', 
+                'error': 'Error.TLabel',
+                'warning': 'Warning.TLabel'
+            }
+            self.status_label.config(text=message, style=style_map.get(status_type, 'TLabel'))
 
     def _save_preferences(self):
         """Save UI preferences to data manager"""
@@ -151,12 +295,14 @@ class PlaceBotGUI:
         if self.preview_tab:
             self.preview_tab.update_stats()
         self.logger.analysis_complete(message['pixel_count'], message['colors_found'])
+        self.update_status(f"Analysis complete: {message['pixel_count']} pixels, {message['colors_found']} colors", 'success')
     
     def _handle_analysis_error(self, message):
         """Handle analysis error message"""
         if self.setup_tab:
             self.setup_tab.on_analysis_error(message)
         self.logger.analysis_error(message['error'])
+        self.update_status(f"Analysis failed: {message['error']}", 'error')
     
     def _handle_progress(self, message):
         """Handle progress message"""
@@ -167,15 +313,26 @@ class PlaceBotGUI:
         """Handle bot complete message"""
         total_painted = message.get('total_painted', 0)
         limit_reached = message.get('limit_reached', False)
+        cancelled_by_mouse = message.get('cancelled_by_mouse', False)
+        
         if self.control_tab:
             self.control_tab.on_bot_complete(total_painted, limit_reached)
+        
         self.logger.bot_complete(total_painted, limit_reached)
+        
+        if cancelled_by_mouse:
+            status_msg = f"Bot cancelled by mouse movement: {total_painted} pixels painted"
+            self.update_status(status_msg, 'warning')
+        else:
+            status_msg = f"Painting complete: {total_painted} pixels" + (" (limit reached)" if limit_reached else "")
+            self.update_status(status_msg, 'success')
     
     def _handle_bot_error(self, message):
         """Handle bot error message"""
         if self.control_tab:
             self.control_tab.on_bot_error(message['error'])
         self.logger.bot_error(message['error'])
+        self.update_status(f"Bot error: {message['error']}", 'error')
     
     def process_queue(self):
         """Process messages from worker threads"""

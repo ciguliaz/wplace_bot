@@ -9,5 +9,6 @@ from .color_detection import detect_palette_colors, save_palette_debug_image
 from .automation import auto_click_positions
 from .pixel_mapping import find_pixels_to_paint_from_map
 from .logger import get_logger
+from .config import get_config
 
 __all__ = ['DataManager', 'AnalysisWorker', 'BotWorker', 'get_screen', 'estimate_pixel_size', 'find_pixels_to_paint', 'detect_palette_colors', 'save_palette_debug_image', 'auto_click_positions', 'build_pixel_map']

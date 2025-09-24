@@ -19,7 +19,7 @@ class ControlTab:
         self.progress_var = None
         self.progress_bar = None
         self.start_btn = None
-        self.stop_btn = None
+
         self.log_text = None
         self.pixel_limit_var = None
         self.pixel_limit_entry = None
@@ -52,11 +52,12 @@ class ControlTab:
         
         self.start_btn = ttk.Button(button_frame, text="Start Painting", 
                                    command=self._start_bot, state='disabled')
-        self.start_btn.pack(side='left', padx=5)
+        self.start_btn.pack(pady=5)
         
-        self.stop_btn = ttk.Button(button_frame, text="Stop", 
-                                  command=self._stop_bot, state='disabled')
-        self.stop_btn.pack(side='left', padx=5)
+        # Mouse movement cancellation info
+        cancel_info = ttk.Label(status_frame, text="Move mouse to cancel bot", 
+                               foreground='blue', font=('Arial', 9, 'italic'))
+        cancel_info.pack(pady=(5, 0))
     
     def _create_bot_settings(self):
         """Create bot settings frame"""
@@ -126,9 +127,8 @@ class ControlTab:
         
         self.main_window.is_running = True
         self.start_btn.config(state='disabled')
-        self.stop_btn.config(state='normal')
-        self.status_label.config(text="Painting...")
-        self.log_message("Starting painting bot...")
+        self.status_label.config(text="Painting... (move mouse to cancel)")
+        self.log_message("Starting painting bot... Move mouse to cancel.")
         
         # Get enabled colors and settings
         enabled_colors = self.main_window.get_enabled_colors()
@@ -141,12 +141,7 @@ class ControlTab:
         # Use the bot worker
         self.bot_worker.start_bot(self.message_queue, enabled_colors, settings)
     
-    def _stop_bot(self):
-        """Stop the painting bot"""
-        self.main_window.is_running = False
-        self.bot_worker.stop_bot()
-        self.status_label.config(text="Stopping...")
-        self.log_message("Stopping bot...")
+
     
     def log_message(self, message):
         """Add message to log"""
@@ -164,7 +159,6 @@ class ControlTab:
         """Handle bot completion"""
         self.main_window.is_running = False
         self.start_btn.config(state='normal')
-        self.stop_btn.config(state='disabled')
         
         if limit_reached:
             self.status_label.config(text=f"Pixel limit reached! ({total_painted} pixels)")
@@ -177,7 +171,6 @@ class ControlTab:
         """Handle bot error"""
         self.main_window.is_running = False
         self.start_btn.config(state='normal')
-        self.stop_btn.config(state='disabled')
         self.status_label.config(text=f"Error: {error_message}")
         self.log_message(f"Bot error: {error_message}")
     
