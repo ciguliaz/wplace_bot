@@ -20,8 +20,8 @@ class ColorsTab:
         self.sort_method = 'id'  # Default sort method
         self.profile_var = None
         
-        # Undo system
-        self.color_state_history = []
+        # Undo system - per profile
+        self.profile_undo_history = {}  # {profile_name: [states]}
         self.undo_button = None
         
         # Create the UI
@@ -287,6 +287,7 @@ class ColorsTab:
         new_profile = self.profile_var.get()
         if self.data_manager.switch_profile(new_profile):
             self._refresh_color_widgets()
+            self._update_undo_button_state()
     
     def _create_new_profile(self):
         """Create new profile dialog with options"""
@@ -364,32 +365,46 @@ class ColorsTab:
     
     def _save_current_state(self):
         """Save current color state for undo"""
+        profile = self.data_manager.get_active_profile()
+        if profile not in self.profile_undo_history:
+            self.profile_undo_history[profile] = []
+        
         state = {}
         for name, var in self.color_vars.items():
             state[name] = var.get()
-        self.color_state_history.append(state)
-        if len(self.color_state_history) > 5:  # Keep last 5 states
-            self.color_state_history.pop(0)
+        
+        self.profile_undo_history[profile].append(state)
+        if len(self.profile_undo_history[profile]) > 5:  # Keep last 5 states
+            self.profile_undo_history[profile].pop(0)
     
     def _show_undo_button(self):
         """Show and enable undo button"""
-        if self.undo_button:
-            self.undo_button.config(state='normal')
+        self._update_undo_button_state()
+    
+    def _update_undo_button_state(self):
+        """Update undo button state based on current profile history"""
+        if not self.undo_button:
+            return
+        
+        profile = self.data_manager.get_active_profile()
+        has_history = (profile in self.profile_undo_history and 
+                      len(self.profile_undo_history[profile]) > 0)
+        
+        self.undo_button.config(state='normal' if has_history else 'disabled')
     
     def undo_last_change(self):
         """Restore previous color state"""
-        if not self.color_state_history:
+        profile = self.data_manager.get_active_profile()
+        if profile not in self.profile_undo_history or not self.profile_undo_history[profile]:
             return
         
-        last_state = self.color_state_history.pop()
+        last_state = self.profile_undo_history[profile].pop()
         for name, value in last_state.items():
             if name in self.color_vars:
                 self.color_vars[name].set(value)
         
-        # Disable undo button if no more history
-        if not self.color_state_history:
-            self.undo_button.config(state='disabled')
-        
+        # Update undo button state
+        self._update_undo_button_state()
         self.main_window.save_user_settings()
     
     def get_enabled_colors(self):
