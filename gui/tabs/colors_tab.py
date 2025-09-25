@@ -17,6 +17,7 @@ class ColorsTab:
         self.bought_vars = {}
         self.color_labels = {}
         self.color_widgets = []
+        self.sort_method = 'id'  # Default sort method
         
         # Create the UI
         self._create_ui()
@@ -59,6 +60,10 @@ class ColorsTab:
         control_frame = ttk.Frame(self.frame)
         control_frame.pack(fill='x', padx=10, pady=5)
         
+        # First row - enable/disable buttons
+        button_row1 = ttk.Frame(control_frame)
+        button_row1.pack(fill='x', pady=2)
+        
         buttons = [
             ("Enable All", self.enable_all_colors),
             ("Disable All", self.disable_all_colors),
@@ -67,11 +72,27 @@ class ColorsTab:
         ]
         
         for text, command in buttons:
-            ttk.Button(control_frame, text=text, command=command).pack(side='left', padx=5)
+            ttk.Button(button_row1, text=text, command=command).pack(side='left', padx=5)
+        
+        # Second row - sort controls
+        sort_row = ttk.Frame(control_frame)
+        sort_row.pack(fill='x', pady=2)
+        
+        ttk.Label(sort_row, text="Sort by:").pack(side='left', padx=5)
+        
+        self.sort_var = tk.StringVar(value='id')
+        sort_combo = ttk.Combobox(sort_row, textvariable=self.sort_var, 
+                                 values=['id', 'name', 'premium'], 
+                                 state='readonly', width=10)
+        sort_combo.pack(side='left', padx=5)
+        sort_combo.bind('<<ComboboxSelected>>', self._on_sort_change)
+        
+        ttk.Button(sort_row, text="Sort", command=self._sort_colors).pack(side='left', padx=5)
     
     def _create_color_widgets(self):
         """Create color control widgets"""
-        for color in self.data_manager.color_palette:
+        sorted_colors = self._get_sorted_colors()
+        for color in sorted_colors:
             self._create_single_color_widget(color)
         
         # Pack canvas and scrollbar after all widgets are created
@@ -192,6 +213,34 @@ class ColorsTab:
             if color['name'] in self.color_vars:
                 self.color_vars[color['name']].set(is_available)
         self.main_window.save_user_settings()
+    
+    def _get_sorted_colors(self):
+        """Get colors sorted by current method"""
+        colors = self.data_manager.color_palette.copy()
+        
+        if self.sort_method == 'id':
+            return sorted(colors, key=lambda c: c['id'])
+        elif self.sort_method == 'name':
+            return sorted(colors, key=lambda c: c['name'])
+        elif self.sort_method == 'premium':
+            return sorted(colors, key=lambda c: (c.get('premium', False), c['id']))
+        
+        return colors
+    
+    def _on_sort_change(self, event=None):
+        """Handle sort method change"""
+        self.sort_method = self.sort_var.get()
+    
+    def _sort_colors(self):
+        """Re-sort and recreate color widgets"""
+        # Clear existing widgets
+        for widget in self.scrollable_frame.winfo_children():
+            widget.destroy()
+        
+        # Recreate with new sort order
+        sorted_colors = self._get_sorted_colors()
+        for color in sorted_colors:
+            self._create_single_color_widget(color)
     
     def get_enabled_colors(self):
         """Get list of enabled colors"""
