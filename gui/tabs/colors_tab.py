@@ -82,12 +82,10 @@ class ColorsTab:
         
         self.sort_var = tk.StringVar(value='id')
         sort_combo = ttk.Combobox(sort_row, textvariable=self.sort_var, 
-                                 values=['id', 'name', 'premium'], 
-                                 state='readonly', width=10)
+                                 values=['id', 'name', 'premium', 'grayscale'], 
+                                 state='readonly', width=12)
         sort_combo.pack(side='left', padx=5)
         sort_combo.bind('<<ComboboxSelected>>', self._on_sort_change)
-        
-        ttk.Button(sort_row, text="Sort", command=self._sort_colors).pack(side='left', padx=5)
     
     def _create_color_widgets(self):
         """Create color control widgets"""
@@ -224,12 +222,20 @@ class ColorsTab:
             return sorted(colors, key=lambda c: c['name'])
         elif self.sort_method == 'premium':
             return sorted(colors, key=lambda c: (c.get('premium', False), c['id']))
+        elif self.sort_method == 'grayscale':
+            return sorted(colors, key=lambda c: self._get_grayscale_value(c['rgb']))
         
         return colors
+    
+    def _get_grayscale_value(self, rgb):
+        """Calculate grayscale value using luminance formula"""
+        r, g, b = rgb
+        return 0.299 * r + 0.587 * g + 0.114 * b
     
     def _on_sort_change(self, event=None):
         """Handle sort method change"""
         self.sort_method = self.sort_var.get()
+        self._sort_colors()
     
     def _sort_colors(self):
         """Re-sort and recreate color widgets"""
