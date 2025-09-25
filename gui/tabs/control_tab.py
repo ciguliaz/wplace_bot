@@ -19,11 +19,11 @@ class ControlTab:
         self.progress_var = None
         self.progress_bar = None
         self.start_btn = None
-
         self.log_text = None
         self.pixel_limit_var = None
         self.pixel_limit_entry = None
         self.pixel_limit_scale = None
+        self.reanalyze_var = None
         
         # Create the UI
         self._create_ui()
@@ -89,6 +89,21 @@ class ControlTab:
                                           variable=self.pixel_limit_var, orient='horizontal',
                                           command=self._update_pixel_limit_from_slider)
         self.pixel_limit_scale.pack(side='right', fill='x', expand=True, padx=(10, 0))
+        
+        # Start options
+        options_frame = ttk.Frame(bot_settings_frame)
+        options_frame.pack(fill='x', pady=(10, 0))
+        
+        saved_reanalyze = self.data_manager.user_settings['preferences'].get('reanalyze_before_start', True)
+        self.reanalyze_var = tk.BooleanVar(value=saved_reanalyze)
+        
+        reanalyze_cb = ttk.Checkbutton(options_frame, text="Reanalyze before starting", 
+                                      variable=self.reanalyze_var, 
+                                      command=self._on_reanalyze_change)
+        reanalyze_cb.pack(side='left')
+        
+        # Update button state after creating checkbox
+        self._update_start_button_state()
     
     def _create_log_frame(self):
         """Create log frame"""
@@ -121,25 +136,47 @@ class ControlTab:
     
     def _start_bot(self):
         """Start the painting bot"""
-        if not self.data_manager.has_analysis_data():
-            messagebox.showerror("Error", "Please run analysis first!")
-            return
-        
+        if self.reanalyze_var.get():
+            self.log_message("Starting reanalysis before painting...")
+            if self.main_window.setup_tab and hasattr(self.main_window.setup_tab, '_analyze_regions'):
+                self._prepare_bot_start()
+                self.main_window.setup_tab._analyze_regions()
+            else:
+                messagebox.showerror("Error", "Cannot perform reanalysis!")
+        else:
+            if not self.data_manager.has_analysis_data():
+                messagebox.showerror("Error", "Please run analysis first or enable 'Reanalyze before starting'!")
+                return
+            self._prepare_bot_start()
+            self._execute_bot_start()
+    
+    def _prepare_bot_start(self):
+        """Prepare UI for bot start"""
         self.main_window.is_running = True
         self.start_btn.config(state='disabled')
         self.status_label.config(text="Painting... (move mouse to cancel)")
         self.log_message("Starting painting bot... Move mouse to cancel.")
-        
-        # Get enabled colors and settings
+    
+    def _execute_bot_start(self):
+        """Execute the actual bot start"""
         enabled_colors = self.main_window.get_enabled_colors()
         settings = {
             'pixel_limit': self.pixel_limit_var.get(),
             'tolerance': self.main_window.setup_tab.tolerance_var.get(),
             'delay': self.main_window.setup_tab.delay_var.get()
         }
-        
-        # Use the bot worker
         self.bot_worker.start_bot(self.message_queue, enabled_colors, settings)
+    
+    def _on_reanalyze_change(self):
+        """Handle reanalyze checkbox change"""
+        self.main_window.save_user_settings()
+        self._update_start_button_state()
+    
+    def _update_start_button_state(self):
+        """Update start button state based on analysis data and reanalyze checkbox"""
+        # Enable if we have analysis data OR reanalyze is checked
+        should_enable = self.data_manager.has_analysis_data() or self.reanalyze_var.get()
+        self.start_btn.config(state='normal' if should_enable else 'disabled')
     
 
     
@@ -176,4 +213,9 @@ class ControlTab:
     
     def enable_start_button(self):
         """Enable the start button (called after successful analysis)"""
+        # Always enable the button after analysis
         self.start_btn.config(state='normal')
+        
+        # If this was triggered by reanalyze option, start the bot
+        if self.main_window.is_running:
+            self._execute_bot_start()

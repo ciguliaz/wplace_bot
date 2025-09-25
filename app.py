@@ -234,6 +234,7 @@ class PlaceBotGUI:
         
         if self.control_tab:
             self.data_manager.update_preference('pixel_limit', self.control_tab.pixel_limit_var.get())
+            self.data_manager.update_preference('reanalyze_before_start', self.control_tab.reanalyze_var.get())
     
     def _save_color_settings(self):
         """Save color settings from colors tab"""
