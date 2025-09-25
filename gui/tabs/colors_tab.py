@@ -20,6 +20,10 @@ class ColorsTab:
         self.sort_method = 'id'  # Default sort method
         self.profile_var = None
         
+        # Undo system
+        self.color_state_history = []
+        self.undo_button = None
+        
         # Create the UI
         self._create_ui()
     
@@ -93,6 +97,10 @@ class ColorsTab:
         
         for text, command in buttons:
             ttk.Button(button_row1, text=text, command=command).pack(side='left', padx=5)
+        
+        # Undo button (initially hidden)
+        self.undo_button = ttk.Button(button_row1, text="Undo", command=self.undo_last_change, state='disabled')
+        self.undo_button.pack(side='left', padx=5)
         
         # Second row - sort controls
         sort_row = ttk.Frame(control_frame)
@@ -201,26 +209,33 @@ class ColorsTab:
     
     def enable_all_colors(self):
         """Enable all colors"""
+        self._save_current_state()
         for var in self.color_vars.values():
             var.set(True)
+        self._show_undo_button()
         self.main_window.save_user_settings()
     
     def disable_all_colors(self):
         """Disable all colors"""
+        self._save_current_state()
         for var in self.color_vars.values():
             var.set(False)
+        self._show_undo_button()
         self.main_window.save_user_settings()
     
     def enable_only_free(self):
         """Enable only free colors"""
+        self._save_current_state()
         for color in self.data_manager.color_palette:
             is_free = not color.get('premium', False)
             if color['name'] in self.color_vars:
                 self.color_vars[color['name']].set(is_free)
+        self._show_undo_button()
         self.main_window.save_user_settings()
     
     def enable_available_colors(self):
         """Enable all available colors (free + bought premium colors)"""
+        self._save_current_state()
         for color in self.data_manager.color_palette:
             color_id = str(color['id'])
             is_bought = self.data_manager.get_color_setting(color_id, 'bought', False) if color.get('premium', False) else True
@@ -228,6 +243,7 @@ class ColorsTab:
             
             if color['name'] in self.color_vars:
                 self.color_vars[color['name']].set(is_available)
+        self._show_undo_button()
         self.main_window.save_user_settings()
     
     def _get_sorted_colors(self):
@@ -345,6 +361,36 @@ class ColorsTab:
         sorted_colors = self._get_sorted_colors()
         for color in sorted_colors:
             self._create_single_color_widget(color)
+    
+    def _save_current_state(self):
+        """Save current color state for undo"""
+        state = {}
+        for name, var in self.color_vars.items():
+            state[name] = var.get()
+        self.color_state_history.append(state)
+        if len(self.color_state_history) > 5:  # Keep last 5 states
+            self.color_state_history.pop(0)
+    
+    def _show_undo_button(self):
+        """Show and enable undo button"""
+        if self.undo_button:
+            self.undo_button.config(state='normal')
+    
+    def undo_last_change(self):
+        """Restore previous color state"""
+        if not self.color_state_history:
+            return
+        
+        last_state = self.color_state_history.pop()
+        for name, value in last_state.items():
+            if name in self.color_vars:
+                self.color_vars[name].set(value)
+        
+        # Disable undo button if no more history
+        if not self.color_state_history:
+            self.undo_button.config(state='disabled')
+        
+        self.main_window.save_user_settings()
     
     def get_enabled_colors(self):
         """Get list of enabled colors"""
