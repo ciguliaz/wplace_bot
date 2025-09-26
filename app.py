@@ -21,8 +21,14 @@ class PlaceBotGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Place Bot - Pixel Art Automation")
-        self.root.geometry(config.get('ui.window_size', '800x800'))
-        self.root.minsize(600, 500)
+        self.root.geometry(config.get('ui.window_size', '900x700'))
+        self.root.minsize(700, 550)
+        
+        # Professional window styling
+        try:
+            self.root.tk.call('tk', 'scaling', 1.0)  # Ensure consistent scaling
+        except:
+            pass
         
         # Center window on screen
         self._center_window()
@@ -69,15 +75,52 @@ class PlaceBotGUI:
         """Setup modern UI styling"""
         style = ttk.Style()
         
-        # Use default theme (cleaner appearance)
-        style.theme_use('default')
+        # Use modern theme
+        try:
+            style.theme_use('vista')  # Windows modern theme
+        except:
+            try:
+                style.theme_use('clam')  # Cross-platform modern theme
+            except:
+                style.theme_use('default')
         
-        # Custom colors
-        style.configure('Title.TLabel', font=('Arial', 12, 'bold'))
-        style.configure('Success.TLabel', foreground='#28a745', font=('Arial', 9, 'bold'))
-        style.configure('Error.TLabel', foreground='#dc3545', font=('Arial', 9, 'bold'))
-        style.configure('Warning.TLabel', foreground='#fd7e14', font=('Arial', 9, 'bold'))
-        style.configure('Info.TLabel', foreground='#17a2b8', font=('Arial', 9))
+        # Professional fonts
+        title_font = ('Segoe UI', 12, 'bold')
+        body_font = ('Segoe UI', 9)
+        small_font = ('Segoe UI', 8)
+        
+        # Modern color palette
+        colors = {
+            'primary': '#0078d4',
+            'success': '#107c10', 
+            'error': '#d13438',
+            'warning': '#ff8c00',
+            'info': '#0078d4',
+            'text': '#323130',
+            'bg': '#faf9f8'
+        }
+        
+        # Configure professional styles
+        style.configure('Title.TLabel', font=title_font, foreground=colors['text'])
+        style.configure('Success.TLabel', foreground=colors['success'], font=(body_font[0], body_font[1], 'bold'))
+        style.configure('Error.TLabel', foreground=colors['error'], font=(body_font[0], body_font[1], 'bold'))
+        style.configure('Warning.TLabel', foreground=colors['warning'], font=(body_font[0], body_font[1], 'bold'))
+        style.configure('Info.TLabel', foreground=colors['info'], font=body_font)
+        
+        # Enhanced button styling
+        style.configure('TButton', font=body_font, padding=(12, 6))
+        style.map('TButton', 
+                 background=[('active', colors['primary']),
+                           ('pressed', '#106ebe')],
+                 foreground=[('active', 'white')])
+        
+        # Professional notebook styling
+        style.configure('TNotebook', background=colors['bg'])
+        style.configure('TNotebook.Tab', font=body_font, padding=(12, 8))
+        
+        # Enhanced frame styling
+        style.configure('TLabelframe', font=body_font)
+        style.configure('TLabelframe.Label', font=(body_font[0], body_font[1], 'bold'))
     
     def _setup_keyboard_shortcuts(self):
         """Setup keyboard shortcuts"""
