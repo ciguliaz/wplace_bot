@@ -73,10 +73,17 @@ class ControlTab:
         saved_pixel_limit = self.data_manager.user_settings['preferences'].get('pixel_limit', 50)
         self.pixel_limit_var = tk.IntVar(value=saved_pixel_limit)
         
-        self.pixel_limit_entry = ttk.Entry(limit_frame, textvariable=self.pixel_limit_var, width=8)
+        # Register validation function
+        vcmd = (self.parent.register(self._validate_digit_input), '%P')
+        
+        self.pixel_limit_entry = ttk.Entry(limit_frame, textvariable=self.pixel_limit_var, width=8,
+                                          validate='key', validatecommand=vcmd)
         self.pixel_limit_entry.pack(side='right', padx=(5, 0))
         self.pixel_limit_entry.bind('<KeyRelease>', self._on_pixel_limit_entry_change)
         self.pixel_limit_entry.bind('<FocusOut>', self._on_pixel_limit_entry_change)
+        
+        # Setup validation styles
+        self._setup_validation_styles()
         
         ttk.Label(limit_frame, text="pixels").pack(side='right', padx=(5, 5))
         
@@ -121,18 +128,35 @@ class ControlTab:
         """Update pixel limit when slider changes"""
         new_value = int(float(value))
         self.pixel_limit_var.set(new_value)
-        self.main_window.save_user_settings()
+        self._debounced_save()
+    
+    def _validate_digit_input(self, value):
+        """Validate that input contains only digits"""
+        if value == "":
+            return True  # Allow empty string
+        return value.isdigit()
+    
+    def _debounced_save(self):
+        """Save settings with debouncing to prevent UI freezing"""
+        if hasattr(self, '_save_timer'):
+            self.main_window.root.after_cancel(self._save_timer)
+        self._save_timer = self.main_window.root.after(500, self.main_window.save_user_settings)
     
     def _on_pixel_limit_entry_change(self, event=None):
-        """Handle manual entry changes for pixel limit"""
+        """Handle manual entry changes for pixel limit with validation"""
         try:
             new_value = self.pixel_limit_var.get()
-            new_value = max(1, min(1000, new_value))  # Clamp to valid range
-            self.pixel_limit_var.set(new_value)
-            self.pixel_limit_scale.set(new_value)
-            self.main_window.save_user_settings()
+            if 1 <= new_value <= 1000:
+                # Valid input - normal styling
+                self.pixel_limit_entry.config(style='TEntry')
+                self.pixel_limit_scale.set(new_value)
+                self._debounced_save()
+            else:
+                # Out of range - warning styling
+                self.pixel_limit_entry.config(style='Warning.TEntry')
         except tk.TclError:
-            pass  # Invalid input, ignore
+            # This shouldn't happen with digit validation, but just in case
+            self.pixel_limit_entry.config(style='Error.TEntry')
     
     def _start_bot(self):
         """Start the painting bot"""
@@ -160,8 +184,21 @@ class ControlTab:
     def _execute_bot_start(self):
         """Execute the actual bot start"""
         enabled_colors = self.main_window.get_enabled_colors()
+        
+        # Check if pixel limit is valid before starting
+        try:
+            pixel_limit = self.pixel_limit_var.get()
+            if not (1 <= pixel_limit <= 1000):
+                from tkinter import messagebox
+                messagebox.showerror("Invalid Input", "Pixel limit must be between 1 and 1000")
+                return
+        except tk.TclError:
+            from tkinter import messagebox
+            messagebox.showerror("Invalid Input", "Please enter a valid number for pixel limit")
+            return
+        
         settings = {
-            'pixel_limit': self.pixel_limit_var.get(),
+            'pixel_limit': pixel_limit,
             'tolerance': self.main_window.setup_tab.tolerance_var.get(),
             'delay': self.main_window.setup_tab.delay_var.get()
         }
@@ -210,6 +247,12 @@ class ControlTab:
         self.start_btn.config(state='normal')
         self.status_label.config(text=f"Error: {error_message}")
         self.log_message(f"Bot error: {error_message}")
+    
+    def _setup_validation_styles(self):
+        """Setup validation styles for input fields"""
+        style = ttk.Style()
+        style.configure('Warning.TEntry', fieldbackground='#fff3cd', bordercolor='#ffc107')
+        style.configure('Error.TEntry', fieldbackground='#f8d7da', bordercolor='#dc3545')
     
     def enable_start_button(self):
         """Enable the start button (called after successful analysis)"""
