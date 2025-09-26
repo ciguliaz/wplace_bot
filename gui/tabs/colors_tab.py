@@ -74,10 +74,19 @@ class ColorsTab:
                                     state='readonly', width=15)
         profile_combo.pack(side='left', padx=5)
         profile_combo.bind('<<ComboboxSelected>>', self._on_profile_change)
+        self._create_tooltip(profile_combo, "Switch between different color profiles")
         
-        ttk.Button(profile_frame, text="New", command=self._create_new_profile).pack(side='left', padx=2)
-        ttk.Button(profile_frame, text="Rename", command=self._rename_profile).pack(side='left', padx=2)
-        ttk.Button(profile_frame, text="Delete", command=self._delete_profile).pack(side='left', padx=2)
+        new_btn = ttk.Button(profile_frame, text="New", command=self._create_new_profile)
+        new_btn.pack(side='left', padx=2)
+        self._create_tooltip(new_btn, "Create a new color profile")
+        
+        rename_btn = ttk.Button(profile_frame, text="Rename", command=self._rename_profile)
+        rename_btn.pack(side='left', padx=2)
+        self._create_tooltip(rename_btn, "Rename the current profile")
+        
+        delete_btn = ttk.Button(profile_frame, text="Delete", command=self._delete_profile)
+        delete_btn.pack(side='left', padx=2)
+        self._create_tooltip(delete_btn, "Delete the current profile")
     
     def _create_control_buttons(self):
         """Create control buttons"""
@@ -95,12 +104,22 @@ class ColorsTab:
             ("Available Colors", self.enable_available_colors)
         ]
         
-        for text, command in buttons:
-            ttk.Button(button_row1, text=text, command=command).pack(side='left', padx=5)
+        button_tooltips = [
+            "Enable all colors for painting",
+            "Disable all colors (none will be used)",
+            "Enable only free colors (no premium)",
+            "Enable free colors + bought premium colors"
+        ]
+        
+        for (text, command), tooltip in zip(buttons, button_tooltips):
+            btn = ttk.Button(button_row1, text=text, command=command)
+            btn.pack(side='left', padx=5)
+            self._create_tooltip(btn, tooltip)
         
         # Undo button (initially hidden)
         self.undo_button = ttk.Button(button_row1, text="Undo", command=self.undo_last_change, state='disabled')
         self.undo_button.pack(side='left', padx=5)
+        self._create_tooltip(self.undo_button, "Undo last bulk color operation")
         
         # Second row - sort controls
         sort_row = ttk.Frame(control_frame)
@@ -114,6 +133,7 @@ class ColorsTab:
                                  state='readonly', width=12)
         sort_combo.pack(side='left', padx=5)
         sort_combo.bind('<<ComboboxSelected>>', self._on_sort_change)
+        self._create_tooltip(sort_combo, "Sort colors by: ID, name, premium status, or brightness")
     
     def _create_color_widgets(self):
         """Create color control widgets"""
@@ -406,6 +426,36 @@ class ColorsTab:
         # Update undo button state
         self._update_undo_button_state()
         self.main_window.save_user_settings()
+    
+    def _create_tooltip(self, widget, text):
+        """Create modern styled tooltip for widget"""
+        def on_enter(event):
+            tooltip = tk.Toplevel()
+            tooltip.wm_overrideredirect(True)
+            tooltip.wm_geometry(f"+{event.x_root+15}+{event.y_root+10}")
+            tooltip.configure(bg='#2d2d2d')
+            
+            # Add subtle shadow effect with frame
+            shadow_frame = tk.Frame(tooltip, bg='#1a1a1a', bd=0)
+            shadow_frame.pack(fill='both', expand=True, padx=(2, 0), pady=(2, 0))
+            
+            main_frame = tk.Frame(shadow_frame, bg='#2d2d2d', bd=1, relief='solid')
+            main_frame.pack(fill='both', expand=True, padx=(0, 2), pady=(0, 2))
+            
+            label = tk.Label(main_frame, text=text, 
+                           bg='#2d2d2d', fg='#ffffff',
+                           font=('Segoe UI', 9), 
+                           padx=8, pady=4)
+            label.pack()
+            widget.tooltip = tooltip
+        
+        def on_leave(event):
+            if hasattr(widget, 'tooltip'):
+                widget.tooltip.destroy()
+                del widget.tooltip
+        
+        widget.bind("<Enter>", on_enter)
+        widget.bind("<Leave>", on_leave)
     
     def get_enabled_colors(self):
         """Get list of enabled colors"""
