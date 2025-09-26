@@ -55,9 +55,9 @@ class ControlTab:
         self.start_btn.pack(pady=5)
         
         # Mouse movement cancellation info
-        cancel_info = ttk.Label(status_frame, text="Move mouse to cancel bot", 
+        self.cancel_info = ttk.Label(status_frame, text="Move mouse to cancel bot", 
                                foreground='blue', font=('Arial', 9, 'italic'))
-        cancel_info.pack(pady=(5, 0))
+        self.cancel_info.pack(pady=(5, 0))
     
     def _create_bot_settings(self):
         """Create bot settings frame"""
@@ -301,3 +301,9 @@ class ControlTab:
         # If this was triggered by reanalyze option, start the bot
         if self.main_window.is_running:
             self._execute_bot_start()
+    
+    def refresh_fonts(self):
+        """Refresh fonts when scaling changes"""
+        if hasattr(self, 'cancel_info'):
+            font = self.main_window.get_scaled_font(9, 'italic')
+            self.cancel_info.config(font=font)

@@ -33,15 +33,18 @@ class PlaceBotGUI:
         # Center window on screen
         self._center_window()
         
-        # Configure modern styling
-        self._setup_styling()
-        
-        # Initialize core components
+        # Initialize core components first
         self.data_manager = DataManager()
         self.analysis_worker = AnalysisWorker(self.data_manager)
         self.bot_worker = BotWorker(self.data_manager)
         self.logger = get_logger()
         self.logger.set_gui_callback(self._gui_log_callback)
+        
+        # Font scaling (load from settings, default to Extra Large 125%)
+        self.font_scale = self.data_manager.user_settings['preferences'].get('font_scale', 1.25)
+        
+        # Configure modern styling
+        self._setup_styling()
         
         # State variables
         self.is_running = False
@@ -84,10 +87,14 @@ class PlaceBotGUI:
             except:
                 style.theme_use('default')
         
-        # Professional fonts
-        title_font = ('Segoe UI', 12, 'bold')
-        body_font = ('Segoe UI', 9)
-        small_font = ('Segoe UI', 8)
+        # Professional fonts with scaling
+        base_title_size = int(12 * self.font_scale)
+        base_body_size = int(9 * self.font_scale)
+        base_small_size = int(8 * self.font_scale)
+        
+        title_font = ('Segoe UI', base_title_size, 'bold')
+        body_font = ('Segoe UI', base_body_size)
+        small_font = ('Segoe UI', base_small_size)
         
         # Modern color palette
         colors = {
@@ -121,6 +128,13 @@ class PlaceBotGUI:
         # Enhanced frame styling
         style.configure('TLabelframe', font=body_font)
         style.configure('TLabelframe.Label', font=(body_font[0], body_font[1], 'bold'))
+        
+        # All other label styles
+        style.configure('TLabel', font=body_font)
+        style.configure('TCheckbutton', font=body_font)
+        style.configure('TRadiobutton', font=body_font)
+        style.configure('TCombobox', font=body_font)
+        style.configure('TEntry', font=body_font)
     
     def _setup_keyboard_shortcuts(self):
         """Setup keyboard shortcuts"""
@@ -199,6 +213,21 @@ class PlaceBotGUI:
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self._on_closing)
         
+        # View menu
+        view_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="View", menu=view_menu)
+        
+        # Font size submenu
+        font_menu = tk.Menu(view_menu, tearoff=0)
+        view_menu.add_cascade(label="Font Size", menu=font_menu)
+        font_menu.add_command(label="Tiny (80%)", command=lambda: self._change_font_size(0.8))
+        font_menu.add_command(label="Small (90%)", command=lambda: self._change_font_size(0.9))
+        font_menu.add_command(label="Normal (100%)", command=lambda: self._change_font_size(1.0))
+        font_menu.add_command(label="Large (120%)", command=lambda: self._change_font_size(1.2))
+        font_menu.add_command(label="Extra Large (125%)", command=lambda: self._change_font_size(1.25))
+        font_menu.add_command(label="Huge (150%)", command=lambda: self._change_font_size(1.5))
+        font_menu.add_command(label="Giant (200%)", command=lambda: self._change_font_size(2.0))
+        
         # Tools menu
         tools_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Tools", menu=tools_menu)
@@ -250,6 +279,25 @@ class PlaceBotGUI:
         )
         messagebox.showinfo("About Place Bot", about_text)
     
+    def _change_font_size(self, scale):
+        """Change font size scaling"""
+        self.font_scale = scale
+        self._setup_styling()
+        
+        # Notify all tabs to refresh their fonts
+        for tab in [self.setup_tab, self.colors_tab, self.control_tab, self.preview_tab]:
+            if tab and hasattr(tab, 'refresh_fonts'):
+                tab.refresh_fonts()
+        
+        # Save the font scale setting
+        self.save_user_settings()
+        self.update_status(f"Font size changed to {int(scale * 100)}%", 'info')
+    
+    def get_scaled_font(self, base_size, weight='normal'):
+        """Get scaled font for tabs to use"""
+        scaled_size = int(base_size * self.font_scale)
+        return ('Segoe UI', scaled_size, weight)
+    
     def update_status(self, message, status_type='info'):
         """Update status bar message"""
         if hasattr(self, 'status_label'):
@@ -270,6 +318,9 @@ class PlaceBotGUI:
         if self.control_tab:
             self.data_manager.update_preference('pixel_limit', self.control_tab.pixel_limit_var.get())
             self.data_manager.update_preference('reanalyze_before_start', self.control_tab.reanalyze_var.get())
+        
+        # Save font scale
+        self.data_manager.update_preference('font_scale', self.font_scale)
     
     def _save_color_settings(self):
         """Save color settings from colors tab"""

@@ -48,7 +48,8 @@ class SetupTab:
 4. Release mouse to confirm selection
 5. Press ESC to cancel selection"""
         
-        ttk.Label(instructions_frame, text=instructions_text, justify='left').pack(anchor='w')
+        self.instructions_label = ttk.Label(instructions_frame, text=instructions_text, justify='left')
+        self.instructions_label.pack(anchor='w')
     
     def _create_region_selection(self):
         """Create region selection frame"""
@@ -121,6 +122,12 @@ class SetupTab:
         self._create_tooltip(delay_scale, "Delay between mouse clicks in milliseconds (lower=faster)")
         self.delay_label = ttk.Label(delay_frame, text=str(saved_delay))
         self.delay_label.pack(side='right', padx=(5, 10))
+    
+    def refresh_fonts(self):
+        """Refresh fonts when scaling changes"""
+        if hasattr(self, 'instructions_label'):
+            font = self.main_window.get_scaled_font(9)
+            self.instructions_label.config(font=font)
     
     def _load_saved_regions(self):
         """Load and display saved regions"""
