@@ -31,7 +31,9 @@ class ControlTab:
     def _create_ui(self):
         """Create control tab UI"""
         self._create_status_frame()
+        self._add_separator()
         self._create_bot_settings()
+        self._add_separator()
         self._create_log_frame()
     
     def _create_status_frame(self):
@@ -54,9 +56,10 @@ class ControlTab:
                                    command=self._start_bot, state='disabled')
         self.start_btn.pack(pady=5)
         
-        # Mouse movement cancellation info
+        # Mouse movement cancellation info with scaled font
+        scaled_font = self.main_window.get_scaled_font(9, 'italic')
         self.cancel_info = ttk.Label(status_frame, text="Move mouse to cancel bot", 
-                               foreground='blue', font=('Arial', 9, 'italic'))
+                               foreground='blue', font=scaled_font)
         self.cancel_info.pack(pady=(5, 0))
     
     def _create_bot_settings(self):
@@ -307,3 +310,7 @@ class ControlTab:
         if hasattr(self, 'cancel_info'):
             font = self.main_window.get_scaled_font(9, 'italic')
             self.cancel_info.config(font=font)
+    
+    def _add_separator(self):
+        """Add visual separator"""
+        ttk.Separator(self.frame, orient='horizontal').pack(fill='x', padx=20, pady=8)

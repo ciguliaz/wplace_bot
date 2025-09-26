@@ -31,7 +31,9 @@ class ColorsTab:
         """Create colors tab UI"""
         self._create_scrollable_frame()
         self._create_profile_controls()
+        self._add_separator()
         self._create_control_buttons()
+        self._add_separator()
         self._create_color_widgets()
     
     def _create_scrollable_frame(self):
@@ -456,6 +458,10 @@ class ColorsTab:
         
         widget.bind("<Enter>", on_enter)
         widget.bind("<Leave>", on_leave)
+    
+    def _add_separator(self):
+        """Add visual separator"""
+        ttk.Separator(self.frame, orient='horizontal').pack(fill='x', padx=20, pady=8)
     
     def get_enabled_colors(self):
         """Get list of enabled colors"""

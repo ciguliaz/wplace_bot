@@ -160,6 +160,9 @@ class PlaceBotGUI:
         
         # Configure dropdown list font (this affects the dropdown items)
         self.root.option_add('*TCombobox*Listbox.font', body_font)
+        
+        # Configure Text widget fonts (for log areas and debug results)
+        self.root.option_add('*Text.font', body_font)
     
     def _setup_keyboard_shortcuts(self):
         """Setup keyboard shortcuts"""
@@ -313,6 +316,9 @@ class PlaceBotGUI:
         scaled_font = self.get_scaled_font(9)
         self.root.option_add('*TCombobox*Listbox.font', scaled_font)
         
+        # Update Text widget fonts globally (for log areas and debug results)
+        self.root.option_add('*Text.font', scaled_font)
+        
         # Notify all tabs to refresh their fonts
         for tab in [self.setup_tab, self.colors_tab, self.control_tab, self.preview_tab]:
             if tab and hasattr(tab, 'refresh_fonts'):
@@ -326,6 +332,31 @@ class PlaceBotGUI:
         """Get scaled font for tabs to use"""
         scaled_size = int(base_size * self.font_scale)
         return ('Segoe UI', scaled_size, weight)
+    
+    def show_spinner(self, widget, text="Loading..."):
+        """Show loading spinner on widget"""
+        if hasattr(widget, 'config'):
+            widget.config(text=f"⟳ {text}", state='disabled')
+    
+    def hide_spinner(self, widget, original_text):
+        """Hide loading spinner and restore widget"""
+        if hasattr(widget, 'config'):
+            widget.config(text=original_text, state='normal')
+    
+    def show_spinner(self, widget, text="Loading..."):
+        """Show loading spinner on widget"""
+        if hasattr(widget, 'config'):
+            widget.config(text=f"⟳ {text}", state='disabled')
+    
+    def hide_spinner(self, widget, original_text):
+        """Hide loading spinner and restore widget"""
+        if hasattr(widget, 'config'):
+            widget.config(text=original_text, state='normal')
+    
+    def log_message(self, message, level='info'):
+        """Log message and update status"""
+        self.logger.info(message)
+        self.update_status(message, level)
     
     def update_status(self, message, status_type='info'):
         """Update status bar message"""
