@@ -18,6 +18,11 @@ class ColorsTab:
         self.color_labels = {}
         self.color_widgets = []
         self.sort_method = 'id'  # Default sort method
+        self.profile_var = None
+        
+        # Undo system - per profile
+        self.profile_undo_history = {}  # {profile_name: [states]}
+        self.undo_button = None
         
         # Create the UI
         self._create_ui()
@@ -25,6 +30,7 @@ class ColorsTab:
     def _create_ui(self):
         """Create colors tab UI"""
         self._create_scrollable_frame()
+        self._create_profile_controls()
         self._create_control_buttons()
         self._create_color_widgets()
     
@@ -55,6 +61,24 @@ class ColorsTab:
             widget.bind("<MouseWheel>", on_mousewheel)
         self.canvas.bind("<Enter>", on_enter)
     
+    def _create_profile_controls(self):
+        """Create profile management controls"""
+        profile_frame = ttk.Frame(self.frame)
+        profile_frame.pack(fill='x', padx=10, pady=5)
+        
+        ttk.Label(profile_frame, text="Profile:").pack(side='left', padx=5)
+        
+        self.profile_var = tk.StringVar(value=self.data_manager.get_active_profile())
+        profile_combo = ttk.Combobox(profile_frame, textvariable=self.profile_var,
+                                    values=self.data_manager.get_profile_names(),
+                                    state='readonly', width=15)
+        profile_combo.pack(side='left', padx=5)
+        profile_combo.bind('<<ComboboxSelected>>', self._on_profile_change)
+        
+        ttk.Button(profile_frame, text="New", command=self._create_new_profile).pack(side='left', padx=2)
+        ttk.Button(profile_frame, text="Rename", command=self._rename_profile).pack(side='left', padx=2)
+        ttk.Button(profile_frame, text="Delete", command=self._delete_profile).pack(side='left', padx=2)
+    
     def _create_control_buttons(self):
         """Create control buttons"""
         control_frame = ttk.Frame(self.frame)
@@ -73,6 +97,10 @@ class ColorsTab:
         
         for text, command in buttons:
             ttk.Button(button_row1, text=text, command=command).pack(side='left', padx=5)
+        
+        # Undo button (initially hidden)
+        self.undo_button = ttk.Button(button_row1, text="Undo", command=self.undo_last_change, state='disabled')
+        self.undo_button.pack(side='left', padx=5)
         
         # Second row - sort controls
         sort_row = ttk.Frame(control_frame)
@@ -112,12 +140,11 @@ class ColorsTab:
         hex_color = f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
         color_canvas.create_rectangle(0, 0, 30, 20, fill=hex_color, outline="")
         
-        # Load saved state
+        # Load saved state from active profile
         color_id = str(color['id'])
-        color_settings = self.data_manager.user_settings['colors'].get(color_id, {})
-        is_bought = color_settings.get('bought', False) if color.get('premium', False) else True
+        is_bought = self.data_manager.get_color_setting(color_id, 'bought', False) if color.get('premium', False) else True
         default_enabled = not color.get('premium', False) or is_bought
-        is_enabled = color_settings.get('enabled', default_enabled)
+        is_enabled = self.data_manager.get_color_setting(color_id, 'enabled', default_enabled)
         
         # Enable/disable checkbox
         var = tk.BooleanVar(value=is_enabled)
@@ -182,34 +209,41 @@ class ColorsTab:
     
     def enable_all_colors(self):
         """Enable all colors"""
+        self._save_current_state()
         for var in self.color_vars.values():
             var.set(True)
+        self._show_undo_button()
         self.main_window.save_user_settings()
     
     def disable_all_colors(self):
         """Disable all colors"""
+        self._save_current_state()
         for var in self.color_vars.values():
             var.set(False)
+        self._show_undo_button()
         self.main_window.save_user_settings()
     
     def enable_only_free(self):
         """Enable only free colors"""
+        self._save_current_state()
         for color in self.data_manager.color_palette:
             is_free = not color.get('premium', False)
             if color['name'] in self.color_vars:
                 self.color_vars[color['name']].set(is_free)
+        self._show_undo_button()
         self.main_window.save_user_settings()
     
     def enable_available_colors(self):
         """Enable all available colors (free + bought premium colors)"""
+        self._save_current_state()
         for color in self.data_manager.color_palette:
             color_id = str(color['id'])
-            color_settings = self.data_manager.user_settings['colors'].get(color_id, {})
-            is_bought = color_settings.get('bought', False) if color.get('premium', False) else True
+            is_bought = self.data_manager.get_color_setting(color_id, 'bought', False) if color.get('premium', False) else True
             is_available = not color.get('premium', False) or is_bought
             
             if color['name'] in self.color_vars:
                 self.color_vars[color['name']].set(is_available)
+        self._show_undo_button()
         self.main_window.save_user_settings()
     
     def _get_sorted_colors(self):
@@ -248,14 +282,233 @@ class ColorsTab:
         for color in sorted_colors:
             self._create_single_color_widget(color)
     
+    def _on_profile_change(self, event=None):
+        """Handle profile selection change"""
+        new_profile = self.profile_var.get()
+        if self.data_manager.switch_profile(new_profile):
+            self._refresh_color_widgets()
+            self._update_undo_button_state()
+    
+    def _create_new_profile(self):
+        """Create new profile dialog with options"""
+        dialog = ProfileCreationDialog(self.main_window.root, self.data_manager)
+        result = dialog.show()
+        
+        if result:
+            name, copy_from = result
+            success = False
+            
+            if copy_from:
+                success = self.data_manager.copy_profile(copy_from, name)
+            else:
+                success = self.data_manager.create_profile(name)
+            
+            if success:
+                self._update_profile_combo()
+                self.profile_var.set(name)
+                self.data_manager.switch_profile(name)
+                self._refresh_color_widgets()
+    
+    def _rename_profile(self):
+        """Rename current profile dialog"""
+        from tkinter import simpledialog
+        current = self.profile_var.get()
+        if current == 'Default':
+            from tkinter import messagebox
+            messagebox.showwarning("Warning", "Cannot rename Default profile")
+            return
+        
+        new_name = simpledialog.askstring("Rename Profile", f"Rename '{current}' to:", initialvalue=current)
+        if new_name and self.data_manager.rename_profile(current, new_name):
+            self._update_profile_combo()
+            self.profile_var.set(new_name)
+    
+    def _delete_profile(self):
+        """Delete current profile dialog"""
+        from tkinter import messagebox
+        current = self.profile_var.get()
+        if current == 'Default':
+            messagebox.showwarning("Warning", "Cannot delete Default profile")
+            return
+        
+        if messagebox.askyesno("Delete Profile", f"Delete profile '{current}'?"):
+            if self.data_manager.delete_profile(current):
+                self._update_profile_combo()
+                self.profile_var.set('Default')
+                self._refresh_color_widgets()
+    
+    def _update_profile_combo(self):
+        """Update profile combobox values"""
+        # Find the combobox widget and update its values
+        for widget in self.frame.winfo_children():
+            if isinstance(widget, ttk.Frame):
+                for child in widget.winfo_children():
+                    if isinstance(child, ttk.Combobox) and child['textvariable'] == str(self.profile_var):
+                        child['values'] = self.data_manager.get_profile_names()
+                        break
+    
+    def _refresh_color_widgets(self):
+        """Refresh color widgets after profile change"""
+        # Clear existing widgets
+        for widget in self.scrollable_frame.winfo_children():
+            widget.destroy()
+        
+        # Clear variables
+        self.color_vars.clear()
+        self.bought_vars.clear()
+        self.color_labels.clear()
+        
+        # Recreate widgets with new profile data
+        sorted_colors = self._get_sorted_colors()
+        for color in sorted_colors:
+            self._create_single_color_widget(color)
+    
+    def _save_current_state(self):
+        """Save current color state for undo"""
+        profile = self.data_manager.get_active_profile()
+        if profile not in self.profile_undo_history:
+            self.profile_undo_history[profile] = []
+        
+        state = {}
+        for name, var in self.color_vars.items():
+            state[name] = var.get()
+        
+        self.profile_undo_history[profile].append(state)
+        if len(self.profile_undo_history[profile]) > 5:  # Keep last 5 states
+            self.profile_undo_history[profile].pop(0)
+    
+    def _show_undo_button(self):
+        """Show and enable undo button"""
+        self._update_undo_button_state()
+    
+    def _update_undo_button_state(self):
+        """Update undo button state based on current profile history"""
+        if not self.undo_button:
+            return
+        
+        profile = self.data_manager.get_active_profile()
+        has_history = (profile in self.profile_undo_history and 
+                      len(self.profile_undo_history[profile]) > 0)
+        
+        self.undo_button.config(state='normal' if has_history else 'disabled')
+    
+    def undo_last_change(self):
+        """Restore previous color state"""
+        profile = self.data_manager.get_active_profile()
+        if profile not in self.profile_undo_history or not self.profile_undo_history[profile]:
+            return
+        
+        last_state = self.profile_undo_history[profile].pop()
+        for name, value in last_state.items():
+            if name in self.color_vars:
+                self.color_vars[name].set(value)
+        
+        # Update undo button state
+        self._update_undo_button_state()
+        self.main_window.save_user_settings()
+    
     def get_enabled_colors(self):
         """Get list of enabled colors"""
         enabled_colors = []
         for color in self.data_manager.color_palette:
             color_id = str(color['id'])
-            color_settings = self.data_manager.user_settings['colors'].get(color_id, {})
-            is_enabled = color_settings.get('enabled', True)
+            is_enabled = self.data_manager.get_color_setting(color_id, 'enabled', True)
             
             if is_enabled and color['name'] in self.color_vars and self.color_vars[color['name']].get():
                 enabled_colors.append(color)
         return enabled_colors
+
+
+class ProfileCreationDialog:
+    """Dialog for creating new profiles with copy option"""
+    
+    def __init__(self, parent, data_manager):
+        self.parent = parent
+        self.data_manager = data_manager
+        self.result = None
+    
+    def show(self):
+        """Show dialog and return (name, copy_from) or None"""
+        import tkinter as tk
+        from tkinter import ttk, messagebox
+        
+        dialog = tk.Toplevel(self.parent)
+        dialog.title("Create New Profile")
+        dialog.geometry("400x250")
+        dialog.resizable(False, False)
+        dialog.transient(self.parent)
+        dialog.grab_set()
+        
+        # Center dialog
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - (400 // 2)
+        y = (dialog.winfo_screenheight() // 2) - (250 // 2)
+        dialog.geometry(f"400x250+{x}+{y}")
+        
+        # Main frame with padding
+        main_frame = ttk.Frame(dialog, padding="20")
+        main_frame.pack(fill='both', expand=True)
+        
+        # Name entry
+        name_frame = ttk.Frame(main_frame)
+        name_frame.pack(fill='x', pady=(0, 15))
+        ttk.Label(name_frame, text="Profile Name:").pack(anchor='w')
+        name_var = tk.StringVar()
+        name_entry = ttk.Entry(name_frame, textvariable=name_var, width=35)
+        name_entry.pack(fill='x', pady=(5, 0))
+        name_entry.focus()
+        
+        # Copy option
+        copy_frame = ttk.Frame(main_frame)
+        copy_frame.pack(fill='x', pady=(0, 15))
+        copy_var = tk.BooleanVar()
+        copy_cb = ttk.Checkbutton(copy_frame, text="Copy from existing profile", variable=copy_var)
+        copy_cb.pack(anchor='w')
+        
+        # Source profile selection
+        source_frame = ttk.Frame(main_frame)
+        source_frame.pack(fill='x', pady=(0, 20))
+        ttk.Label(source_frame, text="Copy from:").pack(anchor='w')
+        source_var = tk.StringVar(value=self.data_manager.get_active_profile())
+        source_combo = ttk.Combobox(source_frame, textvariable=source_var,
+                                   values=self.data_manager.get_profile_names(),
+                                   state='readonly', width=32)
+        source_combo.pack(fill='x', pady=(5, 0))
+        
+        def on_copy_toggle():
+            source_combo.config(state='readonly' if copy_var.get() else 'disabled')
+        
+        copy_cb.config(command=on_copy_toggle)
+        on_copy_toggle()  # Initial state
+        
+        # Buttons
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill='x')
+        
+        def on_create():
+            name = name_var.get().strip()
+            if not name:
+                messagebox.showerror("Error", "Please enter a profile name")
+                return
+            
+            if name in self.data_manager.get_profile_names():
+                messagebox.showerror("Error", f"Profile '{name}' already exists")
+                return
+            
+            copy_from = source_var.get() if copy_var.get() else None
+            self.result = (name, copy_from)
+            dialog.destroy()
+        
+        def on_cancel():
+            self.result = None
+            dialog.destroy()
+        
+        ttk.Button(button_frame, text="Create", command=on_create).pack(side='left', padx=5)
+        ttk.Button(button_frame, text="Cancel", command=on_cancel).pack(side='left', padx=5)
+        
+        # Enter key binding
+        dialog.bind('<Return>', lambda e: on_create())
+        dialog.bind('<Escape>', lambda e: on_cancel())
+        
+        dialog.wait_window()
+        return self.result
