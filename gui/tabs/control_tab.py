@@ -256,8 +256,6 @@ class ControlTab:
         should_enable = self.data_manager.has_analysis_data() or self.reanalyze_var.get()
         self.start_btn.config(state='normal' if should_enable else 'disabled')
     
-
-    
     def log_message(self, message):
         """Add message to log"""
         self.log_text.config(state='normal')

@@ -256,7 +256,7 @@ class PlaceBotGUI:
         self._save_color_settings()
 
     def load_saved_regions(self):
-        """Load and display saved regions - delegated to setup tab"""
+        """Load and display saved regions"""
         if self.setup_tab:
             self.setup_tab._load_saved_regions()
 
@@ -270,15 +270,8 @@ class PlaceBotGUI:
         """Callback for logger to display messages in GUI"""
         if self.control_tab:
             self.control_tab.log_message(message)
-    
-    def log_message(self, message):
-        """Log message through logger system"""
-        self.logger.info(message)
 
-    def _handle_log_message(self, message):
-        """Handle log message"""
-        self.logger.info(message['message'])
-    
+
     def _handle_analysis_complete(self, message):
         """Handle analysis complete message"""
         if self.setup_tab:
@@ -330,7 +323,6 @@ class PlaceBotGUI:
     def process_queue(self):
         """Process messages from worker threads"""
         message_handlers = {
-            'log': self._handle_log_message,
             'analysis_complete': self._handle_analysis_complete,
             'analysis_error': self._handle_analysis_error,
             'progress': self._handle_progress,
