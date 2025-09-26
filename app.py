@@ -74,9 +74,10 @@ class PlaceBotGUI:
         
         # Custom colors
         style.configure('Title.TLabel', font=('Arial', 12, 'bold'))
-        style.configure('Success.TLabel', foreground='green')
-        style.configure('Error.TLabel', foreground='red')
-        style.configure('Warning.TLabel', foreground='orange')
+        style.configure('Success.TLabel', foreground='#28a745', font=('Arial', 9, 'bold'))
+        style.configure('Error.TLabel', foreground='#dc3545', font=('Arial', 9, 'bold'))
+        style.configure('Warning.TLabel', foreground='#fd7e14', font=('Arial', 9, 'bold'))
+        style.configure('Info.TLabel', foreground='#17a2b8', font=('Arial', 9))
     
     def _setup_keyboard_shortcuts(self):
         """Setup keyboard shortcuts"""
@@ -136,18 +137,9 @@ class PlaceBotGUI:
         self.status_frame = ttk.Frame(parent)
         self.status_frame.pack(fill='x', pady=(5, 0))
         
-        # Status label
-        self.status_label = ttk.Label(self.status_frame, text="Ready")
+        # Status label with initial styling
+        self.status_label = ttk.Label(self.status_frame, text="Ready", style='Info.TLabel')
         self.status_label.pack(side='left')
-        
-        # Mouse cancellation hint
-        mouse_hint = ttk.Label(self.status_frame, text="🖱️ Move mouse to cancel bot", 
-                              foreground='gray', font=('Arial', 8))
-        mouse_hint.pack(side='left', padx=(20, 0))
-        
-        # Version info
-        version_label = ttk.Label(self.status_frame, text="v1.0.0")
-        version_label.pack(side='right')
         
         # Separator
         ttk.Separator(parent, orient='horizontal').pack(fill='x', pady=(2, 0))
@@ -219,7 +211,7 @@ class PlaceBotGUI:
         """Update status bar message"""
         if hasattr(self, 'status_label'):
             style_map = {
-                'info': 'TLabel',
+                'info': 'Info.TLabel',
                 'success': 'Success.TLabel', 
                 'error': 'Error.TLabel',
                 'warning': 'Warning.TLabel'

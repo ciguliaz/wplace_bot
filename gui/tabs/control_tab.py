@@ -128,6 +128,13 @@ class ControlTab:
         """Update pixel limit when slider changes"""
         new_value = int(float(value))
         self.pixel_limit_var.set(new_value)
+        
+        # Update field styling when slider changes
+        if 1 <= new_value <= 1000:
+            self.pixel_limit_entry.config(style='TEntry')
+        else:
+            self.pixel_limit_entry.config(style='Warning.TEntry')
+        
         self._debounced_save()
     
     def _validate_digit_input(self, value):
