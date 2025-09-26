@@ -177,12 +177,18 @@ class SetupTab:
     def _update_tolerance_label(self, value):
         """Update tolerance value display and save"""
         self.tolerance_label.config(text=f"{int(float(value))}")
-        self.main_window.save_user_settings()
+        self._debounced_save()
 
     def _update_delay_label(self, value):
         """Update delay value display and save"""
         self.delay_label.config(text=f"{int(float(value))}")
-        self.main_window.save_user_settings()
+        self._debounced_save()
+    
+    def _debounced_save(self):
+        """Save settings with debouncing to prevent UI freezing"""
+        if hasattr(self, '_save_timer'):
+            self.main_window.root.after_cancel(self._save_timer)
+        self._save_timer = self.main_window.root.after(500, self.main_window.save_user_settings)
     
     def on_analysis_complete(self, message):
         """Handle analysis completion from main window"""
