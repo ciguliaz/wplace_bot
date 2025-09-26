@@ -160,16 +160,37 @@ class ControlTab:
     
     def _start_bot(self):
         """Start the painting bot"""
+        # Force immediate save of any pending changes before starting
+        if hasattr(self, '_save_timer'):
+            self.main_window.root.after_cancel(self._save_timer)
+            self.main_window.save_user_settings()
+        
         if self.reanalyze_var.get():
             self.log_message("Starting reanalysis before painting...")
             if self.main_window.setup_tab and hasattr(self.main_window.setup_tab, '_analyze_regions'):
                 self._prepare_bot_start()
                 self.main_window.setup_tab._analyze_regions()
             else:
-                messagebox.showerror("Error", "Cannot perform reanalysis!")
+                from tkinter import messagebox
+                messagebox.showerror(
+                    "Analysis Error", 
+                    "Cannot perform reanalysis.\n\n"
+                    "Possible solutions:\n"
+                    "• Go to Setup tab and run analysis manually\n"
+                    "• Uncheck 'Reanalyze before starting' option\n"
+                    "• Restart the application"
+                )
         else:
             if not self.data_manager.has_analysis_data():
-                messagebox.showerror("Error", "Please run analysis first or enable 'Reanalyze before starting'!")
+                from tkinter import messagebox
+                messagebox.showerror(
+                    "No Analysis Data", 
+                    "Analysis is required before starting the bot.\n\n"
+                    "Please choose one of these options:\n\n"
+                    "1. Check 'Reanalyze before starting' (recommended)\n"
+                    "2. Go to Setup tab → Select regions → Run analysis\n\n"
+                    "The bot needs to know where to paint and what colors are available."
+                )
                 return
             self._prepare_bot_start()
             self._execute_bot_start()
@@ -190,11 +211,24 @@ class ControlTab:
             pixel_limit = self.pixel_limit_var.get()
             if not (1 <= pixel_limit <= 1000):
                 from tkinter import messagebox
-                messagebox.showerror("Invalid Input", "Pixel limit must be between 1 and 1000")
+                messagebox.showerror(
+                    "Invalid Pixel Limit", 
+                    f"Pixel limit must be between 1 and 1000.\n\n"
+                    f"Current value: {pixel_limit}\n\n"
+                    f"Please adjust the value and try again."
+                )
+                self.pixel_limit_entry.focus_set()  # Focus the field for easy editing
                 return
         except tk.TclError:
             from tkinter import messagebox
-            messagebox.showerror("Invalid Input", "Please enter a valid number for pixel limit")
+            messagebox.showerror(
+                "Invalid Input", 
+                "Please enter a valid number for pixel limit.\n\n"
+                "• Only numbers are allowed (1-1000)\n"
+                "• Clear the field and enter a new value\n"
+                "• Use the slider for quick selection"
+            )
+            self.pixel_limit_entry.focus_set()
             return
         
         settings = {
@@ -206,7 +240,7 @@ class ControlTab:
     
     def _on_reanalyze_change(self):
         """Handle reanalyze checkbox change"""
-        self.main_window.save_user_settings()
+        self._debounced_save()
         self._update_start_button_state()
     
     def _update_start_button_state(self):
