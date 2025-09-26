@@ -104,7 +104,9 @@ class PlaceBotGUI:
             'warning': '#ff8c00',
             'info': '#0078d4',
             'text': '#323130',
-            'bg': '#faf9f8'
+            'bg': '#faf9f8',
+            'hover': '#f3f2f1',
+            'border': '#c8c6c4'
         }
         
         # Configure professional styles
@@ -114,27 +116,50 @@ class PlaceBotGUI:
         style.configure('Warning.TLabel', foreground=colors['warning'], font=(body_font[0], body_font[1], 'bold'))
         style.configure('Info.TLabel', foreground=colors['info'], font=body_font)
         
-        # Enhanced button styling
+        # Enhanced button styling with subtle hover effects
         style.configure('TButton', font=body_font, padding=(12, 6))
         style.map('TButton', 
-                 background=[('active', colors['primary']),
-                           ('pressed', '#106ebe')],
-                 foreground=[('active', 'white')])
+                 background=[('active', '#f3f2f1'),
+                           ('pressed', '#e1dfdd')],
+                 foreground=[('active', colors['text']),
+                           ('pressed', colors['text'])],
+                 bordercolor=[('active', '#c8c6c4'),
+                            ('pressed', '#a19f9d')],
+                 relief=[('pressed', 'sunken')])
         
         # Professional notebook styling
         style.configure('TNotebook', background=colors['bg'])
         style.configure('TNotebook.Tab', font=body_font, padding=(12, 8))
+        style.map('TNotebook.Tab',
+                 background=[('selected', colors['bg']),
+                           ('active', '#f3f2f1')],
+                 foreground=[('selected', colors['text']),
+                           ('active', colors['text'])])
         
         # Enhanced frame styling
         style.configure('TLabelframe', font=body_font)
         style.configure('TLabelframe.Label', font=(body_font[0], body_font[1], 'bold'))
         
-        # All other label styles
+        # All other widget styles with subtle hover effects
         style.configure('TLabel', font=body_font)
         style.configure('TCheckbutton', font=body_font)
         style.configure('TRadiobutton', font=body_font)
         style.configure('TCombobox', font=body_font)
         style.configure('TEntry', font=body_font)
+        
+        # Subtle hover effects for interactive elements
+        style.map('TCheckbutton',
+                 background=[('active', '#f3f2f1')])
+        style.map('TRadiobutton',
+                 background=[('active', '#f3f2f1')])
+        style.map('TCombobox',
+                 fieldbackground=[('readonly', 'white'),
+                                ('focus', '#f3f2f1')])
+        style.map('TEntry',
+                 fieldbackground=[('focus', '#f3f2f1')])
+        
+        # Configure dropdown list font (this affects the dropdown items)
+        self.root.option_add('*TCombobox*Listbox.font', body_font)
     
     def _setup_keyboard_shortcuts(self):
         """Setup keyboard shortcuts"""
@@ -283,6 +308,10 @@ class PlaceBotGUI:
         """Change font size scaling"""
         self.font_scale = scale
         self._setup_styling()
+        
+        # Update dropdown list fonts globally
+        scaled_font = self.get_scaled_font(9)
+        self.root.option_add('*TCombobox*Listbox.font', scaled_font)
         
         # Notify all tabs to refresh their fonts
         for tab in [self.setup_tab, self.colors_tab, self.control_tab, self.preview_tab]:

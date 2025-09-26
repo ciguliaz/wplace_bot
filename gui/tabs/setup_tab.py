@@ -32,8 +32,11 @@ class SetupTab:
     def _create_ui(self):
         """Create setup tab UI"""
         self._create_instructions()
+        self._add_separator()
         self._create_region_selection()
+        self._add_separator()
         self._create_analysis_frame()
+        self._add_separator()
         self._create_settings_frame()
     
     def _create_instructions(self):
@@ -234,6 +237,10 @@ class SetupTab:
         
         widget.bind("<Enter>", on_enter)
         widget.bind("<Leave>", on_leave)
+    
+    def _add_separator(self):
+        """Add visual separator"""
+        ttk.Separator(self.frame, orient='horizontal').pack(fill='x', padx=20, pady=8)
     
     def on_analysis_error(self, message):
         """Handle analysis error from main window"""
