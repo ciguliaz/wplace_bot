@@ -37,7 +37,10 @@ class DataManager:
     def _load_user_settings(self):
         """Load user settings from JSON file"""
         default_settings = {
-            "colors": {},
+            "color_profiles": {
+                "Default": {"colors": {}}
+            },
+            "active_color_profile": "Default",
             "preferences": {
                 "color_tolerance": 5,
                 "click_delay": 20,
@@ -52,7 +55,7 @@ class DataManager:
                     settings = json.load(f)
                     
                     # Migrate old format if needed
-                    if 'bought_colors' in settings or 'enabled_colors' in settings:
+                    if 'bought_colors' in settings or 'enabled_colors' in settings or 'colors' in settings:
                         settings = self._migrate_old_format(settings)
                     
                     # Merge with defaults
@@ -67,28 +70,36 @@ class DataManager:
             return default_settings
 
     def _migrate_old_format(self, old_settings):
-        """Convert old settings format to new consolidated format"""
+        """Convert old settings format to new profile-based format"""
         new_settings = {
-            "colors": {},
+            "color_profiles": {
+                "Default": {"colors": {}}
+            },
+            "active_color_profile": "Default",
             "preferences": old_settings.get('preferences', {})
         }
         
-        # Get all color IDs
-        all_color_ids = set()
-        if 'bought_colors' in old_settings:
-            all_color_ids.update(old_settings['bought_colors'].keys())
-        if 'enabled_colors' in old_settings:
-            all_color_ids.update(old_settings['enabled_colors'].keys())
+        # Migrate from old 'colors' format or older formats
+        colors_data = {}
+        if 'colors' in old_settings:
+            colors_data = old_settings['colors']
+        else:
+            # Handle very old format with separate bought_colors/enabled_colors
+            all_color_ids = set()
+            if 'bought_colors' in old_settings:
+                all_color_ids.update(old_settings['bought_colors'].keys())
+            if 'enabled_colors' in old_settings:
+                all_color_ids.update(old_settings['enabled_colors'].keys())
+            
+            for color_id in all_color_ids:
+                color_data = {}
+                if color_id in old_settings.get('enabled_colors', {}):
+                    color_data['enabled'] = old_settings['enabled_colors'][color_id]
+                if color_id in old_settings.get('bought_colors', {}):
+                    color_data['bought'] = old_settings['bought_colors'][color_id]
+                colors_data[color_id] = color_data
         
-        # Convert to new format
-        for color_id in all_color_ids:
-            color_data = {}
-            if color_id in old_settings.get('enabled_colors', {}):
-                color_data['enabled'] = old_settings['enabled_colors'][color_id]
-            if color_id in old_settings.get('bought_colors', {}):
-                color_data['bought'] = old_settings['bought_colors'][color_id]
-            new_settings['colors'][color_id] = color_data
-        
+        new_settings['color_profiles']['Default']['colors'] = colors_data
         return new_settings
 
     def save_user_settings(self):
@@ -126,16 +137,78 @@ class DataManager:
         self.save_user_settings()
     
     def get_color_setting(self, color_id, key, default=None):
-        """Get a color-specific setting"""
-        return self.user_settings['colors'].get(str(color_id), {}).get(key, default)
+        """Get a color-specific setting from active profile"""
+        active_profile = self.user_settings['active_color_profile']
+        profile_colors = self.user_settings['color_profiles'].get(active_profile, {}).get('colors', {})
+        return profile_colors.get(str(color_id), {}).get(key, default)
     
     def set_color_setting(self, color_id, key, value):
-        """Set a color-specific setting"""
+        """Set a color-specific setting in active profile"""
         color_id = str(color_id)
-        if color_id not in self.user_settings['colors']:
-            self.user_settings['colors'][color_id] = {}
-        self.user_settings['colors'][color_id][key] = value
+        active_profile = self.user_settings['active_color_profile']
+        
+        if active_profile not in self.user_settings['color_profiles']:
+            self.user_settings['color_profiles'][active_profile] = {'colors': {}}
+        
+        profile_colors = self.user_settings['color_profiles'][active_profile]['colors']
+        if color_id not in profile_colors:
+            profile_colors[color_id] = {}
+        
+        profile_colors[color_id][key] = value
         self.save_user_settings()
+    
+    def get_active_profile(self):
+        """Get active color profile name"""
+        return self.user_settings['active_color_profile']
+    
+    def get_profile_names(self):
+        """Get list of all profile names"""
+        return list(self.user_settings['color_profiles'].keys())
+    
+    def create_profile(self, name):
+        """Create new color profile"""
+        if name not in self.user_settings['color_profiles']:
+            self.user_settings['color_profiles'][name] = {'colors': {}}
+            self.save_user_settings()
+            return True
+        return False
+    
+    def switch_profile(self, name):
+        """Switch to different color profile"""
+        if name in self.user_settings['color_profiles']:
+            self.user_settings['active_color_profile'] = name
+            self.save_user_settings()
+            return True
+        return False
+    
+    def rename_profile(self, old_name, new_name):
+        """Rename a color profile"""
+        if old_name in self.user_settings['color_profiles'] and new_name not in self.user_settings['color_profiles']:
+            self.user_settings['color_profiles'][new_name] = self.user_settings['color_profiles'].pop(old_name)
+            if self.user_settings['active_color_profile'] == old_name:
+                self.user_settings['active_color_profile'] = new_name
+            self.save_user_settings()
+            return True
+        return False
+    
+    def delete_profile(self, name):
+        """Delete a color profile (cannot delete Default)"""
+        if name != 'Default' and name in self.user_settings['color_profiles']:
+            del self.user_settings['color_profiles'][name]
+            if self.user_settings['active_color_profile'] == name:
+                self.user_settings['active_color_profile'] = 'Default'
+            self.save_user_settings()
+            return True
+        return False
+    
+    def copy_profile(self, source_name, new_name):
+        """Copy a profile to a new profile"""
+        if source_name in self.user_settings['color_profiles'] and new_name not in self.user_settings['color_profiles']:
+            import copy
+            self.user_settings['color_profiles'][new_name] = copy.deepcopy(self.user_settings['color_profiles'][source_name])
+            self.save_user_settings()
+            return True
+        return False
     
     def get_enabled_colors(self):
         """Get list of enabled colors"""

@@ -32,8 +32,11 @@ class SetupTab:
     def _create_ui(self):
         """Create setup tab UI"""
         self._create_instructions()
+        self._add_separator()
         self._create_region_selection()
+        self._add_separator()
         self._create_analysis_frame()
+        self._add_separator()
         self._create_settings_frame()
     
     def _create_instructions(self):
@@ -48,7 +51,8 @@ class SetupTab:
 4. Release mouse to confirm selection
 5. Press ESC to cancel selection"""
         
-        ttk.Label(instructions_frame, text=instructions_text, justify='left').pack(anchor='w')
+        self.instructions_label = ttk.Label(instructions_frame, text=instructions_text, justify='left')
+        self.instructions_label.pack(anchor='w')
     
     def _create_region_selection(self):
         """Create region selection frame"""
@@ -61,8 +65,10 @@ class SetupTab:
         ttk.Label(canvas_frame, text="Canvas Region:").pack(side='left')
         self.canvas_status = ttk.Label(canvas_frame, text="Not selected", foreground="red")
         self.canvas_status.pack(side='left', padx=(10, 0))
-        ttk.Button(canvas_frame, text="Select Canvas", 
-                  command=self._select_canvas_region).pack(side='right')
+        canvas_btn = ttk.Button(canvas_frame, text="Select Canvas", 
+                               command=self._select_canvas_region)
+        canvas_btn.pack(side='right')
+        self._create_tooltip(canvas_btn, "Click to select the drawing area on your screen")
         
         # Palette region
         palette_frame = ttk.Frame(region_frame)
@@ -70,8 +76,10 @@ class SetupTab:
         ttk.Label(palette_frame, text="Palette Region:").pack(side='left')
         self.palette_status = ttk.Label(palette_frame, text="Not selected", foreground="red")
         self.palette_status.pack(side='left', padx=(10, 0))
-        ttk.Button(palette_frame, text="Select Palette", 
-                  command=self._select_palette_region).pack(side='right')
+        palette_btn = ttk.Button(palette_frame, text="Select Palette", 
+                                command=self._select_palette_region)
+        palette_btn.pack(side='right')
+        self._create_tooltip(palette_btn, "Click to select the color palette area on your screen")
     
     def _create_analysis_frame(self):
         """Create analysis frame"""
@@ -81,6 +89,7 @@ class SetupTab:
         self.analyze_btn = ttk.Button(analysis_frame, text="Analyze Canvas & Palette", 
                                      command=self._analyze_regions, state='disabled')
         self.analyze_btn.pack(pady=5)
+        self._create_tooltip(self.analyze_btn, "Analyze selected regions to detect pixels and colors")
         self.analysis_status = ttk.Label(analysis_frame, text="Select regions first")
         self.analysis_status.pack(pady=5)
     
@@ -101,6 +110,7 @@ class SetupTab:
         tolerance_scale = ttk.Scale(tolerance_frame, from_=1, to=20, variable=self.tolerance_var, 
                                    orient='horizontal', command=self._update_tolerance_label)
         tolerance_scale.pack(side='right', fill='x', expand=True, padx=(10, 0))
+        self._create_tooltip(tolerance_scale, "How closely colors must match (1=exact, 20=loose)")
         self.tolerance_label = ttk.Label(tolerance_frame, text=str(saved_tolerance))
         self.tolerance_label.pack(side='right', padx=(5, 10))
         
@@ -112,8 +122,15 @@ class SetupTab:
         delay_scale = ttk.Scale(delay_frame, from_=10, to=100, variable=self.delay_var, 
                                orient='horizontal', command=self._update_delay_label)
         delay_scale.pack(side='right', fill='x', expand=True, padx=(10, 0))
+        self._create_tooltip(delay_scale, "Delay between mouse clicks in milliseconds (lower=faster)")
         self.delay_label = ttk.Label(delay_frame, text=str(saved_delay))
         self.delay_label.pack(side='right', padx=(5, 10))
+    
+    def refresh_fonts(self):
+        """Refresh fonts when scaling changes"""
+        if hasattr(self, 'instructions_label'):
+            font = self.main_window.get_scaled_font(9)
+            self.instructions_label.config(font=font)
     
     def _load_saved_regions(self):
         """Load and display saved regions"""
@@ -170,12 +187,18 @@ class SetupTab:
     def _update_tolerance_label(self, value):
         """Update tolerance value display and save"""
         self.tolerance_label.config(text=f"{int(float(value))}")
-        self.main_window.save_user_settings()
+        self._debounced_save()
 
     def _update_delay_label(self, value):
         """Update delay value display and save"""
         self.delay_label.config(text=f"{int(float(value))}")
-        self.main_window.save_user_settings()
+        self._debounced_save()
+    
+    def _debounced_save(self):
+        """Save settings with debouncing to prevent UI freezing"""
+        if hasattr(self, '_save_timer'):
+            self.main_window.root.after_cancel(self._save_timer)
+        self._save_timer = self.main_window.root.after(500, self.main_window.save_user_settings)
     
     def on_analysis_complete(self, message):
         """Handle analysis completion from main window"""
@@ -184,6 +207,40 @@ class SetupTab:
             text=f"Analysis complete! Pixel size: {message['pixel_size']}, "
                  f"Pixels: {message['pixel_count']}, Colors: {message['colors_found']}"
         )
+    
+    def _create_tooltip(self, widget, text):
+        """Create modern styled tooltip for widget"""
+        def on_enter(event):
+            tooltip = tk.Toplevel()
+            tooltip.wm_overrideredirect(True)
+            tooltip.wm_geometry(f"+{event.x_root+15}+{event.y_root+10}")
+            tooltip.configure(bg='#2d2d2d')
+            
+            # Add subtle shadow effect with frame
+            shadow_frame = tk.Frame(tooltip, bg='#1a1a1a', bd=0)
+            shadow_frame.pack(fill='both', expand=True, padx=(2, 0), pady=(2, 0))
+            
+            main_frame = tk.Frame(shadow_frame, bg='#2d2d2d', bd=1, relief='solid')
+            main_frame.pack(fill='both', expand=True, padx=(0, 2), pady=(0, 2))
+            
+            label = tk.Label(main_frame, text=text, 
+                           bg='#2d2d2d', fg='#ffffff',
+                           font=('Segoe UI', 9), 
+                           padx=8, pady=4)
+            label.pack()
+            widget.tooltip = tooltip
+        
+        def on_leave(event):
+            if hasattr(widget, 'tooltip'):
+                widget.tooltip.destroy()
+                del widget.tooltip
+        
+        widget.bind("<Enter>", on_enter)
+        widget.bind("<Leave>", on_leave)
+    
+    def _add_separator(self):
+        """Add visual separator"""
+        ttk.Separator(self.frame, orient='horizontal').pack(fill='x', padx=20, pady=8)
     
     def on_analysis_error(self, message):
         """Handle analysis error from main window"""

@@ -19,11 +19,11 @@ class ControlTab:
         self.progress_var = None
         self.progress_bar = None
         self.start_btn = None
-        self.stop_btn = None
         self.log_text = None
         self.pixel_limit_var = None
         self.pixel_limit_entry = None
         self.pixel_limit_scale = None
+        self.reanalyze_var = None
         
         # Create the UI
         self._create_ui()
@@ -31,7 +31,9 @@ class ControlTab:
     def _create_ui(self):
         """Create control tab UI"""
         self._create_status_frame()
+        self._add_separator()
         self._create_bot_settings()
+        self._add_separator()
         self._create_log_frame()
     
     def _create_status_frame(self):
@@ -52,11 +54,13 @@ class ControlTab:
         
         self.start_btn = ttk.Button(button_frame, text="Start Painting", 
                                    command=self._start_bot, state='disabled')
-        self.start_btn.pack(side='left', padx=5)
+        self.start_btn.pack(pady=5)
         
-        self.stop_btn = ttk.Button(button_frame, text="Stop", 
-                                  command=self._stop_bot, state='disabled')
-        self.stop_btn.pack(side='left', padx=5)
+        # Mouse movement cancellation info with scaled font
+        scaled_font = self.main_window.get_scaled_font(9, 'italic')
+        self.cancel_info = ttk.Label(status_frame, text="Move mouse to cancel bot", 
+                               foreground='blue', font=scaled_font)
+        self.cancel_info.pack(pady=(5, 0))
     
     def _create_bot_settings(self):
         """Create bot settings frame"""
@@ -72,10 +76,17 @@ class ControlTab:
         saved_pixel_limit = self.data_manager.user_settings['preferences'].get('pixel_limit', 50)
         self.pixel_limit_var = tk.IntVar(value=saved_pixel_limit)
         
-        self.pixel_limit_entry = ttk.Entry(limit_frame, textvariable=self.pixel_limit_var, width=8)
+        # Register validation function
+        vcmd = (self.parent.register(self._validate_digit_input), '%P')
+        
+        self.pixel_limit_entry = ttk.Entry(limit_frame, textvariable=self.pixel_limit_var, width=8,
+                                          validate='key', validatecommand=vcmd)
         self.pixel_limit_entry.pack(side='right', padx=(5, 0))
         self.pixel_limit_entry.bind('<KeyRelease>', self._on_pixel_limit_entry_change)
         self.pixel_limit_entry.bind('<FocusOut>', self._on_pixel_limit_entry_change)
+        
+        # Setup validation styles
+        self._setup_validation_styles()
         
         ttk.Label(limit_frame, text="pixels").pack(side='right', padx=(5, 5))
         
@@ -88,6 +99,21 @@ class ControlTab:
                                           variable=self.pixel_limit_var, orient='horizontal',
                                           command=self._update_pixel_limit_from_slider)
         self.pixel_limit_scale.pack(side='right', fill='x', expand=True, padx=(10, 0))
+        
+        # Start options
+        options_frame = ttk.Frame(bot_settings_frame)
+        options_frame.pack(fill='x', pady=(10, 0))
+        
+        saved_reanalyze = self.data_manager.user_settings['preferences'].get('reanalyze_before_start', True)
+        self.reanalyze_var = tk.BooleanVar(value=saved_reanalyze)
+        
+        reanalyze_cb = ttk.Checkbutton(options_frame, text="Reanalyze before starting", 
+                                      variable=self.reanalyze_var, 
+                                      command=self._on_reanalyze_change)
+        reanalyze_cb.pack(side='left')
+        
+        # Update button state after creating checkbox
+        self._update_start_button_state()
     
     def _create_log_frame(self):
         """Create log frame"""
@@ -105,48 +131,133 @@ class ControlTab:
         """Update pixel limit when slider changes"""
         new_value = int(float(value))
         self.pixel_limit_var.set(new_value)
-        self.main_window.save_user_settings()
+        
+        # Update field styling when slider changes
+        if 1 <= new_value <= 1000:
+            self.pixel_limit_entry.config(style='TEntry')
+        else:
+            self.pixel_limit_entry.config(style='Warning.TEntry')
+        
+        self._debounced_save()
+    
+    def _validate_digit_input(self, value):
+        """Validate that input contains only digits"""
+        if value == "":
+            return True  # Allow empty string
+        return value.isdigit()
+    
+    def _debounced_save(self):
+        """Save settings with debouncing to prevent UI freezing"""
+        if hasattr(self, '_save_timer'):
+            self.main_window.root.after_cancel(self._save_timer)
+        self._save_timer = self.main_window.root.after(500, self.main_window.save_user_settings)
     
     def _on_pixel_limit_entry_change(self, event=None):
-        """Handle manual entry changes for pixel limit"""
+        """Handle manual entry changes for pixel limit with validation"""
         try:
             new_value = self.pixel_limit_var.get()
-            new_value = max(1, min(1000, new_value))  # Clamp to valid range
-            self.pixel_limit_var.set(new_value)
-            self.pixel_limit_scale.set(new_value)
-            self.main_window.save_user_settings()
+            if 1 <= new_value <= 1000:
+                # Valid input - normal styling
+                self.pixel_limit_entry.config(style='TEntry')
+                self.pixel_limit_scale.set(new_value)
+                self._debounced_save()
+            else:
+                # Out of range - warning styling
+                self.pixel_limit_entry.config(style='Warning.TEntry')
         except tk.TclError:
-            pass  # Invalid input, ignore
+            # This shouldn't happen with digit validation, but just in case
+            self.pixel_limit_entry.config(style='Error.TEntry')
     
     def _start_bot(self):
         """Start the painting bot"""
-        if not self.data_manager.has_analysis_data():
-            messagebox.showerror("Error", "Please run analysis first!")
-            return
+        # Force immediate save of any pending changes before starting
+        if hasattr(self, '_save_timer'):
+            self.main_window.root.after_cancel(self._save_timer)
+            self.main_window.save_user_settings()
         
+        if self.reanalyze_var.get():
+            self.log_message("Starting reanalysis before painting...")
+            if self.main_window.setup_tab and hasattr(self.main_window.setup_tab, '_analyze_regions'):
+                self._prepare_bot_start()
+                self.main_window.setup_tab._analyze_regions()
+            else:
+                from tkinter import messagebox
+                messagebox.showerror(
+                    "Analysis Error", 
+                    "Cannot perform reanalysis.\n\n"
+                    "Possible solutions:\n"
+                    "• Go to Setup tab and run analysis manually\n"
+                    "• Uncheck 'Reanalyze before starting' option\n"
+                    "• Restart the application"
+                )
+        else:
+            if not self.data_manager.has_analysis_data():
+                from tkinter import messagebox
+                messagebox.showerror(
+                    "No Analysis Data", 
+                    "Analysis is required before starting the bot.\n\n"
+                    "Please choose one of these options:\n\n"
+                    "1. Check 'Reanalyze before starting' (recommended)\n"
+                    "2. Go to Setup tab → Select regions → Run analysis\n\n"
+                    "The bot needs to know where to paint and what colors are available."
+                )
+                return
+            self._prepare_bot_start()
+            self._execute_bot_start()
+    
+    def _prepare_bot_start(self):
+        """Prepare UI for bot start"""
         self.main_window.is_running = True
         self.start_btn.config(state='disabled')
-        self.stop_btn.config(state='normal')
-        self.status_label.config(text="Painting...")
-        self.log_message("Starting painting bot...")
-        
-        # Get enabled colors and settings
+        self.status_label.config(text="Painting... (move mouse to cancel)")
+        self.log_message("Starting painting bot... Move mouse to cancel.")
+    
+    def _execute_bot_start(self):
+        """Execute the actual bot start"""
         enabled_colors = self.main_window.get_enabled_colors()
+        
+        # Check if pixel limit is valid before starting
+        try:
+            pixel_limit = self.pixel_limit_var.get()
+            if not (1 <= pixel_limit <= 1000):
+                from tkinter import messagebox
+                messagebox.showerror(
+                    "Invalid Pixel Limit", 
+                    f"Pixel limit must be between 1 and 1000.\n\n"
+                    f"Current value: {pixel_limit}\n\n"
+                    f"Please adjust the value and try again."
+                )
+                self.pixel_limit_entry.focus_set()  # Focus the field for easy editing
+                return
+        except tk.TclError:
+            from tkinter import messagebox
+            messagebox.showerror(
+                "Invalid Input", 
+                "Please enter a valid number for pixel limit.\n\n"
+                "• Only numbers are allowed (1-1000)\n"
+                "• Clear the field and enter a new value\n"
+                "• Use the slider for quick selection"
+            )
+            self.pixel_limit_entry.focus_set()
+            return
+        
         settings = {
-            'pixel_limit': self.pixel_limit_var.get(),
+            'pixel_limit': pixel_limit,
             'tolerance': self.main_window.setup_tab.tolerance_var.get(),
             'delay': self.main_window.setup_tab.delay_var.get()
         }
-        
-        # Use the bot worker
         self.bot_worker.start_bot(self.message_queue, enabled_colors, settings)
     
-    def _stop_bot(self):
-        """Stop the painting bot"""
-        self.main_window.is_running = False
-        self.bot_worker.stop_bot()
-        self.status_label.config(text="Stopping...")
-        self.log_message("Stopping bot...")
+    def _on_reanalyze_change(self):
+        """Handle reanalyze checkbox change"""
+        self._debounced_save()
+        self._update_start_button_state()
+    
+    def _update_start_button_state(self):
+        """Update start button state based on analysis data and reanalyze checkbox"""
+        # Enable if we have analysis data OR reanalyze is checked
+        should_enable = self.data_manager.has_analysis_data() or self.reanalyze_var.get()
+        self.start_btn.config(state='normal' if should_enable else 'disabled')
     
     def log_message(self, message):
         """Add message to log"""
@@ -164,7 +275,6 @@ class ControlTab:
         """Handle bot completion"""
         self.main_window.is_running = False
         self.start_btn.config(state='normal')
-        self.stop_btn.config(state='disabled')
         
         if limit_reached:
             self.status_label.config(text=f"Pixel limit reached! ({total_painted} pixels)")
@@ -177,10 +287,30 @@ class ControlTab:
         """Handle bot error"""
         self.main_window.is_running = False
         self.start_btn.config(state='normal')
-        self.stop_btn.config(state='disabled')
         self.status_label.config(text=f"Error: {error_message}")
         self.log_message(f"Bot error: {error_message}")
     
+    def _setup_validation_styles(self):
+        """Setup validation styles for input fields"""
+        style = ttk.Style()
+        style.configure('Warning.TEntry', fieldbackground='#fff3cd', bordercolor='#ffc107')
+        style.configure('Error.TEntry', fieldbackground='#f8d7da', bordercolor='#dc3545')
+    
     def enable_start_button(self):
         """Enable the start button (called after successful analysis)"""
+        # Always enable the button after analysis
         self.start_btn.config(state='normal')
+        
+        # If this was triggered by reanalyze option, start the bot
+        if self.main_window.is_running:
+            self._execute_bot_start()
+    
+    def refresh_fonts(self):
+        """Refresh fonts when scaling changes"""
+        if hasattr(self, 'cancel_info'):
+            font = self.main_window.get_scaled_font(9, 'italic')
+            self.cancel_info.config(font=font)
+    
+    def _add_separator(self):
+        """Add visual separator"""
+        ttk.Separator(self.frame, orient='horizontal').pack(fill='x', padx=20, pady=8)
